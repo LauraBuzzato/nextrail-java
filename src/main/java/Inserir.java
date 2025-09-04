@@ -39,20 +39,6 @@ public class Inserir {
             }
         }
 
-        bubbleSortPorUsuario(lista);
-
-        System.out.println("\n=== Lista de Logs Ordenados por Usuário ===");
-        for (RegistroDeLog log : lista) {
-            System.out.println(log.toString());
-        }
-
-        selectionSortPorMaquina(lista);
-
-        System.out.println("\n=== Lista de Logs Ordenados por Máquina ===");
-        for (RegistroDeLog log : lista) {
-            System.out.println(log.toString());
-        }
-
         selectionSortPorCriticidade(lista);
 
         System.out.println("\n=== Lista de Logs Ordenados por Criticidade ===");
@@ -61,40 +47,6 @@ public class Inserir {
         }
 
         scanner.close();
-    }
-
-    public static void bubbleSortPorUsuario(List<RegistroDeLog> lista) {
-        int n = lista.size();
-        for (int i = 0; i < n - 1; i++) {
-            for (int j = 0; j < n - 1 - i; j++) {
-                String usuario1 = lista.get(j).getUsuario();
-                String usuario2 = lista.get(j + 1).getUsuario();
-
-                if (usuario1.compareToIgnoreCase(usuario2) > 0) {
-                    RegistroDeLog temp = lista.get(j);
-                    lista.set(j, lista.get(j + 1));
-                    lista.set(j + 1, temp);
-                }
-            }
-        }
-    }
-
-    public static void selectionSortPorMaquina(List<RegistroDeLog> lista) {
-        int n = lista.size();
-        for (int i = 0; i < n - 1; i++) {
-            int menor = i;
-            for (int j = i + 1; j < n; j++) {
-                String maquina1 = lista.get(j).getMaquina();
-                String maquina2 = lista.get(menor).getMaquina();
-
-                if (maquina1.compareToIgnoreCase(maquina2) < 0) {
-                    menor = j;
-                }
-            }
-            RegistroDeLog temp = lista.get(i);
-            lista.set(i, lista.get(menor));
-            lista.set(menor, temp);
-        }
     }
 
     public static void selectionSortPorCriticidade(List<RegistroDeLog> lista) {
