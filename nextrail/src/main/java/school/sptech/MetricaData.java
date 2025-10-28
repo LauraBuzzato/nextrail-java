@@ -68,36 +68,4 @@ public class MetricaData {
         return limites;
     }
 
-    // Debug para verificar métricas existentes
-    public void debugMetricasExistentes(Integer servidorId) {
-        try {
-            String sql = """
-                    SELECT 
-                        s.nome as servidor,
-                        tc.nome_tipo_componente as tipoComponente,
-                        m.nome as metrica, 
-                        g.nome as gravidade, 
-                        m.valor
-                    FROM metrica m
-                    JOIN servidor s ON m.fk_componenteServidor_servidor = s.id
-                    JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
-                    JOIN gravidade g ON m.fk_gravidade = g.id
-                    WHERE m.fk_componenteServidor_servidor = ?
-                    ORDER BY tc.nome_tipo_componente, m.nome, g.nome
-                    """;
-
-            List<Map<String, Object>> resultados = con.queryForList(sql, servidorId);
-
-            System.out.println("=== MÉTRICAS EXISTENTES PARA SERVIDOR ID: " + servidorId + " ===");
-            for (Map<String, Object> row : resultados) {
-                System.out.printf("Servidor: %s | Tipo: %s | Métrica: %s | Gravidade: %s | Valor: %.2f%n",
-                        row.get("servidor"), row.get("tipoComponente"), row.get("metrica"),
-                        row.get("gravidade"), row.get("valor"));
-            }
-            System.out.println("==========================================================");
-
-        } catch (Exception e) {
-            System.out.println("Erro no debug: " + e.getMessage());
-        }
-    }
 }

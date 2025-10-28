@@ -185,45 +185,4 @@ public class RelatorioAlertas {
             System.out.println("Nenhum alerta encontrado na última hora!");
         }
     }
-
-    // ==================== RELATÓRIO AUTOMÁTICO ====================
-    public void iniciarRelatorioAutomatico() {
-        System.out.println("Iniciando relatório automático - enviará a cada 1 hora");
-
-        java.util.concurrent.ScheduledExecutorService scheduler =
-                java.util.concurrent.Executors.newScheduledThreadPool(1);
-
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                gerarEEnviarRelatorio();
-            } catch (Exception e) {
-                System.out.println("Erro ao gerar relatório: " + e.getMessage());
-            }
-        }, 0, 1, java.util.concurrent.TimeUnit.HOURS);
-    }
-
-    // ==================== MAIN PARA TESTE ====================
-    public static void main(String[] args) {
-        System.out.println("=== MODO TESTE DO RELATÓRIO ===");
-
-        try {
-            BancoData banco = new BancoData();
-            JdbcTemplate con = banco.con;
-            Notificador notificador = new Notificador();
-
-            RelatorioAlertas relatorio = new RelatorioAlertas(con, notificador);
-
-            // Primeiro debug para entender os dados
-            relatorio.debugDadosAlertas();
-
-            // Depois gerar relatório
-            relatorio.gerarRelatorioTeste();
-
-            System.out.println("Teste concluído! Verificar slack e jira");
-
-        } catch (Exception e) {
-            System.out.println("Erro no teste: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
 }

@@ -24,11 +24,11 @@ public class Tratamento {
         AlertaInsert alertaInsert = new AlertaInsert(con);
         Notificador notificador = new Notificador();
 
-        String csvBronze = "C:/Users/User/Desktop/bucket_bronze/csv_grupo03.csv";
-        String csvPrata = "C:/Users/User/Desktop/bucket_prata/csv_grupo03_prata.csv";
+        String csvBronze = "csv_grupo03.csv";
+        String csvPrata = "csv_grupo03_prata.csv";
 
-        File pastaPrata = new File("C:/Users/User/Desktop/bucket_prata");
-        if (!pastaPrata.exists()) pastaPrata.mkdirs();
+        // File pastaPrata = new File("C:/Users/User/Desktop/bucket_prata");
+        // if (!pastaPrata.exists()) pastaPrata.mkdirs();
 
         int linhasTotais = 0;
         int linhasProcessadas = 0;
@@ -45,9 +45,6 @@ public class Tratamento {
         // ---------- CARREGAR LIMITES EM MEMÓRIA ----------
         Map<Integer, Map<String, Map<String, Double>>> todosLimites =
                 metricaData.buscarTodosLimitesServidor(servidorId);
-
-        // Debug para verificar métricas carregadas
-        metricaData.debugMetricasExistentes(servidorId);
 
         try (
                 BufferedReader leitor = new BufferedReader(
