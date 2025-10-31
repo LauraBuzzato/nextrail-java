@@ -24,11 +24,15 @@ public class Tratamento {
         AlertaInsert alertaInsert = new AlertaInsert(con);
         Notificador notificador = new Notificador();
 
-        String csvBronze = "csv_grupo03.csv";
-        String csvPrata = "csv_grupo03_prata.csv";
+        String csvRaw = "datalake/raw/csv_grupo03_raw.csv";
+        String csvTrusted = "datalake/trusted/csv_grupo03_trusted.csv";
 
-        // File pastaPrata = new File("C:/Users/User/Desktop/bucket_prata");
-        // if (!pastaPrata.exists()) pastaPrata.mkdirs();
+        File pastaData = new File("datalake");
+        File pastaRaw = new File("datalake/raw");
+        File pastaTrusted = new File("datalake/trusted");
+        if (!pastaData.exists()) pastaData.mkdirs();
+        if (!pastaRaw.exists()) pastaRaw.mkdirs();
+        if (!pastaTrusted.exists()) pastaTrusted.mkdirs();
 
         int linhasTotais = 0;
         int linhasProcessadas = 0;
@@ -48,9 +52,9 @@ public class Tratamento {
 
         try (
                 BufferedReader leitor = new BufferedReader(
-                        new InputStreamReader(new FileInputStream(csvBronze), StandardCharsets.UTF_8));
+                        new InputStreamReader(new FileInputStream(csvRaw), StandardCharsets.UTF_8));
                 BufferedWriter escritor = new BufferedWriter(
-                        new OutputStreamWriter(new FileOutputStream(csvPrata), StandardCharsets.UTF_8))
+                        new OutputStreamWriter(new FileOutputStream(csvTrusted), StandardCharsets.UTF_8))
         ) {
             String linha = leitor.readLine();
             if (linha != null) escritor.write(linha + "\n"); // Cabeçalho
@@ -124,7 +128,7 @@ public class Tratamento {
                     Linhas válidas: %d
                     Alertas gerados: %d
                     Arquivo tratado salvo em: %s
-                    """, linhasTotais, linhasProcessadas, alertasGerados, csvPrata);
+                    """, linhasTotais, linhasProcessadas, alertasGerados, csvTrusted);
 
             // ========== EXECUTAR RELATÓRIO APÓS PROCESSAR ==========
             System.out.println("\nEXECUTANDO TESTE DO RELATÓRIO...");
