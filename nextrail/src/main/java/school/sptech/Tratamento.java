@@ -1,15 +1,16 @@
 package school.sptech;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.core.sync.RequestBody;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Tratamento {
 
@@ -24,37 +25,40 @@ public class Tratamento {
         AlertaInsert alertaInsert = new AlertaInsert(con);
         Notificador notificador = new Notificador();
 
-        String csvRaw = "datalake/raw/csv_grupo03_raw.csv";
-        String csvTrusted = "datalake/trusted/csv_grupo03_trusted.csv";
+        String bucketRaw = "bucket-nr-prod-raw";           // Bucket de origem
+        String keyRaw = "csv_grupo03_raw.csv";
 
-        File pastaData = new File("datalake");
-        File pastaRaw = new File("datalake/raw");
-        File pastaTrusted = new File("datalake/trusted");
-        if (!pastaData.exists()) pastaData.mkdirs();
-        if (!pastaRaw.exists()) pastaRaw.mkdirs();
-        if (!pastaTrusted.exists()) pastaTrusted.mkdirs();
+        String bucketTrusted = "bucket-nr-prod-trusted";   // Bucket de destino
+        String keyTrusted = "csv_grupo03_trusted.csv";
 
         int linhasTotais = 0;
         int linhasProcessadas = 0;
         int alertasGerados = 0;
 
-        // ---------- CONFIGURAÇÃO DOS SERVIDORES E COMPONENTES ----------
-        // Mapeamento fixo baseado no seu banco de dados
+
         Integer servidorId = 1; // Servidor01
         Map<String, Integer> tipoComponenteMap = new HashMap<>();
-        tipoComponenteMap.put("CPU", 1); // CPU
-        tipoComponenteMap.put("Memória RAM", 2); // RAM
-        tipoComponenteMap.put("Disco Rígido", 3); // Disco
+        tipoComponenteMap.put("CPU", 1);
+        tipoComponenteMap.put("Memória RAM", 2);
+        tipoComponenteMap.put("Disco Rígido", 3);
 
-        // ---------- CARREGAR LIMITES EM MEMÓRIA ----------
         Map<Integer, Map<String, Map<String, Double>>> todosLimites =
                 metricaData.buscarTodosLimitesServidor(servidorId);
 
+        S3Client s3 = S3Client.create();
+
         try (
-                BufferedReader leitor = new BufferedReader(
-                        new InputStreamReader(new FileInputStream(csvRaw), StandardCharsets.UTF_8));
-                BufferedWriter escritor = new BufferedWriter(
-                        new OutputStreamWriter(new FileOutputStream(csvTrusted), StandardCharsets.UTF_8))
+                InputStream rawStream = s3.getObject(
+                        GetObjectRequest.builder()
+                                .bucket(bucketRaw)
+                                .key(keyRaw)
+                                .build()
+                );
+                BufferedReader leitor = new BufferedReader(new InputStreamReader(rawStream, StandardCharsets.UTF_8));
+
+                // Escrita do CSV tratado em memória
+                StringWriter csvTratado = new StringWriter();
+                BufferedWriter escritor = new BufferedWriter(csvTratado)
         ) {
             String linha = leitor.readLine();
             if (linha != null) escritor.write(linha + "\n"); // Cabeçalho
@@ -90,7 +94,6 @@ public class Tratamento {
                     if (!cpu.isEmpty()) {
                         Integer tipoComponenteId = tipoComponenteMap.get("CPU");
                         if (tipoComponenteId != null) {
-                            // O método verificarComponente agora retorna a gravidade, e a lógica de alerta é interna
                             boolean alerta = verificarComponente(servidorId, tipoComponenteId, "CPU", cpu,
                                     todosLimites, alertaInsert, timestamp);
                             gerouAlerta = alerta || gerouAlerta;
@@ -122,24 +125,35 @@ public class Tratamento {
                 }
             }
 
+            escritor.flush();
+
+            s3.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucketTrusted)
+                            .key(keyTrusted)
+                            .build(),
+                    RequestBody.fromString(csvTratado.toString())
+            );
+
             System.out.printf("""
                     Processamento concluído!
                     Linhas lidas: %d
                     Linhas válidas: %d
                     Alertas gerados: %d
-                    Arquivo tratado salvo em: %s
-                    """, linhasTotais, linhasProcessadas, alertasGerados, csvTrusted);
+                    Arquivo tratado salvo em s3://%s/%s
+                    """, linhasTotais, linhasProcessadas, alertasGerados, bucketTrusted, keyTrusted);
 
-            // ========== EXECUTAR RELATÓRIO APÓS PROCESSAR ==========
             System.out.println("\nEXECUTANDO TESTE DO RELATÓRIO...");
             executarTesteRelatorio(con, notificador);
 
         } catch (IOException e) {
             System.out.println("Erro ao processar CSV: " + e.getMessage());
+        } finally {
+            s3.close();
         }
     }
 
-    // ========== MÉTODO PARA TESTAR RELATÓRIO ==========
+
     private static void executarTesteRelatorio(JdbcTemplate con, Notificador notificador) {
         try {
             System.out.println("Gerando relatório de teste...");
@@ -154,7 +168,6 @@ public class Tratamento {
         }
     }
 
-    // ----------------- FUNÇÕES AUXILIARES -----------------
     private static String limparLinha(String linha) {
         if (linha == null) return "";
         linha = linha.replaceAll("[^\\x20-\\x7E]", "");
@@ -198,7 +211,6 @@ public class Tratamento {
         }
     }
 
-    // ----------------- VERIFICAÇÃO DE ALERTA -----------------
     private static boolean verificarComponente(Integer servidorId, Integer tipoComponenteId,
                                                String nomeComponente, String valorStr,
                                                Map<Integer, Map<String, Map<String, Double>>> todosLimites,
@@ -208,14 +220,12 @@ public class Tratamento {
         try {
             double valorLido = Double.parseDouble(valorStr);
 
-            // Buscar limites para este tipo de componente
             Map<String, Map<String, Double>> limitesComponente = todosLimites.get(tipoComponenteId);
             if (limitesComponente == null) {
                 System.out.printf("Nenhum limite encontrado para tipo componente ID: %d%n", tipoComponenteId);
                 return false;
             }
 
-            // Determinar qual métrica usar baseado no tipo de componente
             String nomeMetrica;
             switch (nomeComponente) {
                 case "CPU" -> nomeMetrica = "Uso de CPU";
@@ -234,7 +244,6 @@ public class Tratamento {
             String gravidadeEncontrada = "Normal";
             Double limiteAtingido = null;
 
-
             if (limitesMetrica.containsKey("Alto") && valorLido >= limitesMetrica.get("Alto")) {
                 gravidadeId = 3;
                 gravidadeEncontrada = "Alto";
@@ -249,19 +258,14 @@ public class Tratamento {
                 limiteAtingido = limitesMetrica.get("Baixo");
             }
 
-            System.out.printf("Servidor: %d | Componente: %s | Valor: %.2f | Gravidade: %s | Limite: %s%n | horário: %s",
+            System.out.printf("Servidor: %d | Componente: %s | Valor: %.2f | Gravidade: %s | Limite: %s | horário: %s%n",
                     servidorId, nomeComponente, valorLido, gravidadeEncontrada, limiteAtingido, timestamp);
 
-            // === LÓGICA DE ALERTA POR SEQUÊNCIA DE 3 GRAVIDADES ===
-
-            // 1. Atualizar o histórico
             historicoGravidade.putIfAbsent(tipoComponenteId, new LinkedList<>());
             List<Integer> historico = historicoGravidade.get(tipoComponenteId);
 
             historico.add(gravidadeId);
-            if (historico.size() > 3) {
-                ((LinkedList<Integer>) historico).removeFirst();
-            }
+            if (historico.size() > 3) ((LinkedList<Integer>) historico).removeFirst();
 
             if (historico.size() == 3 && gravidadeId > 0) {
                 Integer g1 = historico.get(0);
@@ -269,7 +273,6 @@ public class Tratamento {
                 Integer g3 = historico.get(2);
 
                 if (g1.equals(g2) && g2.equals(g3)) {
-                    // SE ENCONTROU ALGUMA GRAVIDADE, insere alerta
                     alertaInsert.inserirAlerta(servidorId, tipoComponenteId, gravidadeId, timestamp);
                     System.out.printf("ALERTA INSERIDO NO BANCO (3 CONSECUTIVOS): Servidor %d - %s - %s (%.2f >= %.2f)%n",
                             servidorId, nomeComponente, gravidadeEncontrada, valorLido, limiteAtingido);
