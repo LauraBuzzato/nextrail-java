@@ -11,7 +11,7 @@ public class Notificador {
     private final String slackWebhookUrl = Credenciais.getSlackWebHookUrl();
     private final String jiraUrl = Credenciais.getJiraUrl();
 
-    // ✅ ATUALIZE COM SUAS CREDENCIAIS:
+
     private final String jiraEmail = Credenciais.getJiraEmail();
     private final String jiraApiToken = Credenciais.getJiraApiToken();
     private final String jiraAuthToken = Base64.getEncoder().encodeToString(
@@ -46,12 +46,12 @@ public class Notificador {
     }
 
     public void criarJira(String titulo, String descricao) {
-        // Lista de tipos de issue para tentar
+
         String[] tiposIssue = {"Incident", "Problem", "Task", "Bug", "Story", "Change"};
 
         for (String tipo : tiposIssue) {
             if (tentarCriarJiraComTipo(titulo, descricao, tipo)) {
-                break; // Se funcionou, para de tentar
+                break;
             }
         }
     }
@@ -89,7 +89,7 @@ public class Notificador {
                     issueType
             );
 
-            System.out.println("🔄 Tentando criar Jira com tipo: " + issueType);
+            System.out.println("Tentando criar Jira com tipo: " + issueType);
 
             try (OutputStream os = con.getOutputStream()) {
                 os.write(json.getBytes(StandardCharsets.UTF_8));
@@ -114,10 +114,10 @@ public class Notificador {
     public void enviarRelatorioConsolidado(String titulo, String mensagem) {
         System.out.println("ENVIANDO RELATÓRIO CONSOLIDADO:");
 
-        System.out.println("\n🔗 Enviando para Slack...");
+        System.out.println("\nEnviando para Slack...");
         enviarSlack(mensagem);
 
-        System.out.println("\n🔗 Enviando para Jira...");
+        System.out.println("\nEnviando para Jira...");
         criarJira(titulo, mensagem);
     }
 }

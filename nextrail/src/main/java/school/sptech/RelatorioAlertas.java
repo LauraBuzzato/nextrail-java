@@ -13,18 +13,18 @@ public class RelatorioAlertas {
         this.notificador = notificador;
     }
 
-    // ==================== RELATÓRIO DE TESTE ====================
+
     public void gerarRelatorioTeste() {
         System.out.println("GERANDO RELATÓRIO DE TESTE");
         gerarEEnviarRelatorio();
         System.out.println("Relatório de teste enviado para Slack/Jira!");
     }
 
-    // ==================== GERA E ENVIA RELATÓRIO ====================
+
     private void gerarEEnviarRelatorio() {
         System.out.println("Gerando relatório consolidado...");
 
-        // Buscar servidores que tiveram alertas no período
+
         String sqlServidores = """
                 SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
                 FROM alerta a
@@ -49,12 +49,12 @@ public class RelatorioAlertas {
             String servidorNome = (String) servidor.get("servidorNome");
             String empresaNome = (String) servidor.get("empresaNome");
 
-            // Contagem de alertas
+
             Map<String, Integer> contadorGravidade = contarAlertasPorGravidade(servidorId);
-            // Componentes com alerta Alto
+
             Set<String> componentesAlto = buscarComponentesComAlertaAlto(servidorId);
 
-            // Montar mensagem
+
             StringBuilder mensagem = new StringBuilder();
             mensagem.append("*RELATÓRIO DE ALERTAS - ÚLTIMA HORA*\n");
             mensagem.append("Empresa: ").append(empresaNome).append("\n");
@@ -75,7 +75,7 @@ public class RelatorioAlertas {
             System.out.println("RELATÓRIO:");
             System.out.println(mensagem);
 
-            // Enviar relatório consolidado
+
             notificador.enviarRelatorioConsolidado(
                     "Relatório de Alertas - " + servidorNome,
                     mensagem.toString()
@@ -83,7 +83,7 @@ public class RelatorioAlertas {
         }
     }
 
-    // ==================== CONTAGEM DE ALERTAS ====================
+
     private Map<String, Integer> contarAlertasPorGravidade(Integer servidorId) {
         Map<String, Integer> contador = new HashMap<>();
         contador.put("Baixo", 0);
@@ -120,7 +120,7 @@ public class RelatorioAlertas {
         return contador;
     }
 
-    // ==================== COMPONENTES COM ALERTA ALTO ====================
+
     private Set<String> buscarComponentesComAlertaAlto(Integer servidorId) {
         Set<String> componentes = new HashSet<>();
 
@@ -149,7 +149,7 @@ public class RelatorioAlertas {
         return componentes;
     }
 
-    // ==================== DEBUG: VERIFICAR DADOS NO BANCO ====================
+
     public void debugDadosAlertas() {
         System.out.println("=== DEBUG: DADOS DE ALERTAS NO BANCO ===");
 

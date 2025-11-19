@@ -22,11 +22,25 @@ public class ServidorConfig {
         this.historicoDisco = new int[leiturasParaAlerta];
     }
 
-    public int getId() { return id; }
-    public String getNome() { return nome; }
-    public String getEmpresaNome() { return empresaNome; }
-    public int getEmpresaId() { return empresaId; }
-    public int getLeiturasParaAlerta() { return leiturasParaAlerta; }
+    public int getId() {
+        return id;
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public String getEmpresaNome() {
+        return empresaNome;
+    }
+
+    public int getEmpresaId() {
+        return empresaId;
+    }
+
+    public int getLeiturasParaAlerta() {
+        return leiturasParaAlerta;
+    }
 
     public void adicionarLeitura(int gravidadeCpu, int gravidadeRam, int gravidadeDisco) {
         historicoCpu[posicaoHistorico] = gravidadeCpu;
