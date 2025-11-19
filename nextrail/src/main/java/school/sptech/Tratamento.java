@@ -23,9 +23,9 @@ public class Tratamento {
         Notificador notificador = new Notificador();
         S3Client s3 = S3Client.create();
 
-        String bucketRaw = "bucket-nr-prod-raw";
-        String keyRaw = "csv_grupo03_raw.csv";
-        String bucketTrusted = "bucket-nr-prod-trusted";
+        String bucketRaw = "bucket-teste-python";
+        String keyRaw = "machine_data_2025-11-19.csv";
+        String bucketTrusted = "bucket-trusted-teste-tratamento";
 
         int linhasTotais = 0;
         int linhasProcessadas = 0;
