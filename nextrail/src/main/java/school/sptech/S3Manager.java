@@ -25,7 +25,7 @@ public class S3Manager {
 
             String dataAtual = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
-            String key = String.format("%s/%s/coleta_%s_%s.csv",
+            String key = String.format("%s/%s/coleta_%s.csv",
                     empresaFolder, servidorFolder, dataAtual);
 
 

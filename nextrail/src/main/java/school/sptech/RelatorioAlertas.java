@@ -1,6 +1,7 @@
 package school.sptech;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+
 import java.util.*;
 
 public class RelatorioAlertas {
@@ -12,7 +13,6 @@ public class RelatorioAlertas {
         this.con = con;
         this.notificador = notificador;
     }
-
 
     public void gerarRelatorioAposProcessamento(List<String> servidoresProcessados) {
         System.out.println("GERANDO RELATÓRIO APÓS PROCESSAMENTO DO CSV");
@@ -92,23 +92,32 @@ public class RelatorioAlertas {
         String placeholders = String.join(",", Collections.nCopies(servidoresProcessados.size(), "?"));
 
         String sqlServidores = """
-        SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
-        FROM alerta a
-        JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
-        JOIN empresa e ON s.fk_empresa = e.id
-        WHERE s.nome IN (""" + placeholders + ") " + """
-        AND a.inicio >= NOW() - INTERVAL 1 HOUR
-        """;
+                SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
+                FROM alerta a
+                JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
+                JOIN empresa e ON s.fk_empresa = e.id
+                WHERE s.nome IN (""" + placeholders + ") " + """
+                AND a.inicio >= NOW() - INTERVAL 1 HOUR
+                """;
+
         List<Map<String, Object>> servidores = con.queryForList(sqlServidores, servidoresProcessados.toArray());
 
         StringBuilder relatorioConsolidado = new StringBuilder();
         relatorioConsolidado.append("*RELATÓRIO - PROCESSAMENTO CSV*\n");
-        relatorioConsolidado.append("Servidores processados: ").append(String.join(", ", servidoresProcessados)).append("\n");
+        relatorioConsolidado.append("Servidores lidos do CSV: ").append(String.join(", ", servidoresProcessados)).append("\n");
+        relatorioConsolidado.append("Total de servidores processados: ").append(servidoresProcessados.size()).append("\n");
         relatorioConsolidado.append("------------------------------------------\n");
 
         if (servidores.isEmpty()) {
-            relatorioConsolidado.append("Nenhum alerta gerado durante o processamento.\n");
+            relatorioConsolidado.append("Nenhum alerta gerado durante o processamento para os servidores listados.\n");
+            relatorioConsolidado.append("Possíveis causas:\n");
+            relatorioConsolidado.append("Os servidores não existem no banco de dados\n");
+            relatorioConsolidado.append("Não houve alertas na última hora\n");
+            relatorioConsolidado.append("Os nomes no CSV não correspondem aos nomes no banco\n");
         } else {
+            relatorioConsolidado.append("Servidores com alertas na última hora: ").append(servidores.size()).append("\n");
+            relatorioConsolidado.append("----------------------------------------\n");
+
             for (Map<String, Object> servidor : servidores) {
                 Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
                 String servidorNome = (String) servidor.get("servidorNome");
@@ -125,18 +134,34 @@ public class RelatorioAlertas {
 
                 if (!componentesAlto.isEmpty()) {
                     relatorioConsolidado.append("Componentes com ALERTA ALTO: ").append(String.join(", ", componentesAlto)).append("\n");
+                } else {
+                    relatorioConsolidado.append("Nenhum componente com alerta alto\n");
                 }
                 relatorioConsolidado.append("----------------------------------------\n");
             }
+
+            // Adicionar resumo geral
+            int totalAlertas = servidores.stream()
+                    .mapToInt(servidor -> {
+                        Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
+                        Map<String, Integer> contador = contarAlertasPorGravidade(servidorId);
+                        return contador.get("Baixo") + contador.get("Médio") + contador.get("Alto");
+                    })
+                    .sum();
+
+            relatorioConsolidado.append("RESUMO GERAL:\n");
+            relatorioConsolidado.append("Total de servidores com alertas: ").append(servidores.size()).append("\n");
+            relatorioConsolidado.append("Total de alertas gerados: ").append(totalAlertas).append("\n");
         }
 
-        relatorioConsolidado.append("Período: Última hora\n");
+        relatorioConsolidado.append("Período analisado: Última hora\n");
+        relatorioConsolidado.append("Data/hora do relatório: ").append(new Date()).append("\n");
 
         System.out.println("RELATÓRIO CONSOLIDADO:");
         System.out.println(relatorioConsolidado);
 
         notificador.enviarRelatorioConsolidado(
-                "Relatório - Processamento CSV",
+                "Relatório - Processamento CSV - " + servidoresProcessados.size() + " servidores",
                 relatorioConsolidado.toString()
         );
     }
@@ -165,7 +190,8 @@ public class RelatorioAlertas {
                 contador.put(gravidade, total);
             }
 
-            System.out.println("Contagem alertas - Alto: " + contador.get("Alto") +
+            System.out.println("Contagem alertas - Servidor " + servidorId +
+                    ": Alto: " + contador.get("Alto") +
                     ", Médio: " + contador.get("Médio") +
                     ", Baixo: " + contador.get("Baixo"));
 
@@ -196,48 +222,12 @@ public class RelatorioAlertas {
                 componentes.add((String) row.get("componente"));
             }
 
-            System.out.println("Componentes com alerta ALTO: " + componentes);
+            System.out.println("Componentes com alerta ALTO - Servidor " + servidorId + ": " + componentes);
 
         } catch (Exception e) {
             System.out.println("Erro ao buscar componentes com alerta alto: " + e.getMessage());
         }
 
         return componentes;
-    }
-
-    public void debugDadosAlertas() {
-        System.out.println("=== DEBUG: DADOS DE ALERTAS NO BANCO ===");
-
-        String sqlDebug = """
-                SELECT 
-                    s.nome as servidor,
-                    tc.nome_tipo_componente as componente,
-                    g.nome as gravidade,
-                    COUNT(a.id) as total_alertas,
-                    a.inicio
-                FROM alerta a
-                JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
-                JOIN tipo_componente tc ON a.fk_componenteServidor_tipoComponente = tc.id
-                JOIN gravidade g ON a.fk_gravidade = g.id
-                WHERE a.inicio >= NOW() - INTERVAL 1 HOUR
-                GROUP BY s.id, s.nome, tc.id, tc.nome_tipo_componente, g.id, g.nome, a.inicio
-                ORDER BY a.inicio DESC
-                LIMIT 10
-                """;
-
-        List<Map<String, Object>> debugResults = con.queryForList(sqlDebug);
-
-        System.out.println("ÚLTIMOS 10 ALERTAS:");
-        for (Map<String, Object> row : debugResults) {
-            System.out.println("Servidor: " + row.get("servidor") +
-                    " | Componente: " + row.get("componente") +
-                    " | Gravidade: " + row.get("gravidade") +
-                    " | Alertas: " + row.get("total_alertas") +
-                    " | Início: " + row.get("inicio"));
-        }
-
-        if (debugResults.isEmpty()) {
-            System.out.println("Nenhum alerta encontrado na última hora!");
-        }
     }
 }

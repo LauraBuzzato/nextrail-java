@@ -238,7 +238,6 @@ public class Tratamento {
             try {
                 double cpuValor = Double.parseDouble(cpuStr);
                 gravidadeCpu = limites.verificarGravidadeCpu(cpuValor);
-                System.out.printf("CPU: %.1f%% → Gravidade: %d%n", cpuValor, gravidadeCpu);
             } catch (NumberFormatException e) {
                 System.out.println("Valor inválido para CPU: " + cpuStr);
             }
@@ -248,7 +247,6 @@ public class Tratamento {
             try {
                 double ramValor = Double.parseDouble(ramStr);
                 gravidadeRam = limites.verificarGravidadeRam(ramValor);
-                System.out.printf("RAM: %.1f%% → Gravidade: %d%n", ramValor, gravidadeRam);
             } catch (NumberFormatException e) {
                 System.out.println("Valor inválido para RAM: " + ramStr);
             }
@@ -258,7 +256,6 @@ public class Tratamento {
             try {
                 double discoValor = Double.parseDouble(discoStr);
                 gravidadeDisco = limites.verificarGravidadeDisco(discoValor);
-                System.out.printf("Disco: %.1f%% | Gravidade: %d%n", discoValor, gravidadeDisco);
             } catch (NumberFormatException e) {
                 System.out.println("Valor inválido para Disco: " + discoStr);
             }
@@ -310,30 +307,35 @@ public class Tratamento {
         }
 
         if (servidor.deveAlertarCpu(gravidadeCpu)) {
-            if (verificarLeiturasConsecutivas(servidor, gravidadeCpu, servidor.getLeiturasParaAlerta())) {
-                alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeCpu, timestamp);
+            Integer tipoComponenteId = alertaInsert.buscarIdTipoComponente("CPU");
+            if (tipoComponenteId != null) {
+                alertaInsert.inserirAlerta(servidor.getId(), tipoComponenteId, gravidadeCpu, timestamp);
                 alertaGerado = true;
+                servidor.resetarContadoresCpu();
                 System.out.println("ALERTA CPU - Servidor: " + servidor.getNome() +
                         " | Gravidade: " + gravidadeCpu +
                         " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
             }
         }
 
-        if (servidor.deveAlertarCpu(gravidadeRam)) {
-            // Verifica se atingiu o número mínimo de leituras consecutivas
-            if (verificarLeiturasConsecutivas(servidor, gravidadeRam, servidor.getLeiturasParaAlerta())) {
-                alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeRam, timestamp);
+        if (servidor.deveAlertarRam(gravidadeRam)) {
+            Integer tipoComponenteId = alertaInsert.buscarIdTipoComponente("RAM");
+            if (tipoComponenteId != null) {
+                alertaInsert.inserirAlerta(servidor.getId(), tipoComponenteId, gravidadeRam, timestamp);
                 alertaGerado = true;
+                servidor.resetarContadoresRam();
                 System.out.println("ALERTA RAM - Servidor: " + servidor.getNome() +
                         " | Gravidade: " + gravidadeRam +
                         " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
             }
         }
 
-        if (servidor.deveAlertarCpu(gravidadeDisco)) {
-            if (verificarLeiturasConsecutivas(servidor, gravidadeDisco, servidor.getLeiturasParaAlerta())) {
-                alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeDisco, timestamp);
+        if (servidor.deveAlertarDisco(gravidadeDisco)) {
+            Integer tipoComponenteId = alertaInsert.buscarIdTipoComponente("Disco");
+            if (tipoComponenteId != null) {
+                alertaInsert.inserirAlerta(servidor.getId(), tipoComponenteId, gravidadeDisco, timestamp);
                 alertaGerado = true;
+                servidor.resetarContadoresDisco();
                 System.out.println("ALERTA DISCO - Servidor: " + servidor.getNome() +
                         " | Gravidade: " + gravidadeDisco +
                         " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
@@ -343,9 +345,6 @@ public class Tratamento {
         return alertaGerado;
     }
 
-    private static boolean verificarLeiturasConsecutivas(ServidorConfig servidor, int gravidadeAtual, int leiturasNecessarias) {
-        return servidor.verificarLeiturasConsecutivas(gravidadeAtual, leiturasNecessarias);
-    }
 
     private static ServidorArquivo adicionarLinhaAoArquivoServidor(ServidorConfig servidor, String cabecalho, String[] campos) {
         ServidorArquivo arquivo = null;
