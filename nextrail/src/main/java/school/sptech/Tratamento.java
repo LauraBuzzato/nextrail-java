@@ -66,7 +66,7 @@ public class Tratamento {
                 }
             }
 
-            for (ServidorArquivo servidorArq : arquivosPorServidor) {
+
                 S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
                 s3Manager.salvarCSVTrusted(
                         servidorArq.getEmpresaNome(),
@@ -74,7 +74,7 @@ public class Tratamento {
                         servidorArq.getConteudoCSV()
                 );
                 System.out.println("Arquivo salvo: " + servidorArq.getEmpresaNome() + "/" + servidorArq.getServidorNome());
-            }
+        
 
             System.out.printf("Processamento concluído! Linhas lidas: %d Linhas válidas: %d Alertas gerados: %d%n",
                     linhasTotais, linhasProcessadas, alertasGerados);

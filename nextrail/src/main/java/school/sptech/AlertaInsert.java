@@ -12,7 +12,7 @@ public class AlertaInsert {
         this.con = con;
     }
 
-    // MÉTODO REFATORADO: Agora recebe servidorId e tipoComponenteId
+   
     public void inserirAlerta(Integer servidorId, Integer tipoComponenteId, Integer gravidade, String tempoInicio) {
         String sql = """
                 INSERT INTO alerta (fk_componenteServidor_servidor, fk_componenteServidor_tipoComponente, fk_gravidade, inicio)
@@ -22,7 +22,7 @@ public class AlertaInsert {
         System.out.println("Alerta inserido - Servidor: " + servidorId + ", Tipo Componente: " + tipoComponenteId + ", Gravidade: " + gravidade);
     }
 
-    // Buscar ID do tipo de componente pelo nome
+  
     public Integer buscarIdTipoComponente(String nomeTipoComponente) {
         try {
             String sql = "SELECT id FROM tipo_componente WHERE nome_tipo_componente = ?";
@@ -38,7 +38,6 @@ public class AlertaInsert {
         }
     }
 
-    // Buscar servidor pelo nome
     public Integer buscarIdServidor(String nomeServidor) {
         try {
             String sql = "SELECT id FROM servidor WHERE nome = ?";
