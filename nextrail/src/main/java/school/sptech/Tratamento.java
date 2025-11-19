@@ -150,19 +150,26 @@ public class Tratamento {
         ComponenteLimites limites = new ComponenteLimites();
         try {
             String sql = """
-                    SELECT tc.nome_tipo_componente as nome_tipo_componente, g.nome as gravidade, m.valor as valor
-                    FROM metrica m
-                    JOIN gravidade g ON m.fk_gravidade = g.id
-                    JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
-                    WHERE m.fk_componenteServidor_servidor = ?
-                    ORDER BY tc.nome_tipo_componente, g.nome
-                    """;
+                SELECT tc.nome_tipo_componente as nome_tipo_componente, 
+                       g.nome as gravidade, 
+                       m.valor as valor,
+                       ls.leituras_consecutivas_para_alerta
+                FROM metrica m
+                JOIN gravidade g ON m.fk_gravidade = g.id
+                JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
+                JOIN componente_servidor cs ON m.fk_componenteServidor_servidor = cs.fk_servidor 
+                    AND m.fk_componenteServidor_tipoComponente = cs.fk_tipo_componente
+                JOIN leitura_script ls ON ls.fk_servidor = cs.fk_servidor
+                WHERE m.fk_componenteServidor_servidor = ?
+                ORDER BY tc.nome_tipo_componente, g.nome
+                """;
 
             List<MetricaLimite> metricas = con.query(sql, (rs, rowNum) ->
                     new MetricaLimite(
                             rs.getString("nome_tipo_componente"),
                             rs.getString("gravidade"),
-                            rs.getDouble("valor")
+                            rs.getDouble("valor"),
+                            rs.getInt("leituras_consecutivas_para_alerta")
                     ), servidorId);
 
             for (MetricaLimite metrica : metricas) {
@@ -303,24 +310,41 @@ public class Tratamento {
         }
 
         if (servidor.deveAlertarCpu(gravidadeCpu)) {
-            alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeCpu, timestamp);
-            alertaGerado = true;
-            System.out.println("ALERTA CPU - Servidor: " + servidor.getNome() + " | Gravidade: " + gravidadeCpu);
+            if (verificarLeiturasConsecutivas(servidor, gravidadeCpu, servidor.getLeiturasParaAlerta())) {
+                alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeCpu, timestamp);
+                alertaGerado = true;
+                System.out.println("ALERTA CPU - Servidor: " + servidor.getNome() +
+                        " | Gravidade: " + gravidadeCpu +
+                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
+            }
         }
 
-        if (servidor.deveAlertarRam(gravidadeRam)) {
-            alertaInsert.inserirAlerta(servidor.getId(), 2, gravidadeRam, timestamp);
-            alertaGerado = true;
-            System.out.println("ALERTA RAM - Servidor: " + servidor.getNome() + " | Gravidade: " + gravidadeRam);
+        if (servidor.deveAlertarCpu(gravidadeRam)) {
+            // Verifica se atingiu o número mínimo de leituras consecutivas
+            if (verificarLeiturasConsecutivas(servidor, gravidadeRam, servidor.getLeiturasParaAlerta())) {
+                alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeRam, timestamp);
+                alertaGerado = true;
+                System.out.println("ALERTA RAM - Servidor: " + servidor.getNome() +
+                        " | Gravidade: " + gravidadeRam +
+                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
+            }
         }
 
-        if (servidor.deveAlertarDisco(gravidadeDisco)) {
-            alertaInsert.inserirAlerta(servidor.getId(), 3, gravidadeDisco, timestamp);
-            alertaGerado = true;
-            System.out.println("ALERTA DISCO - Servidor: " + servidor.getNome() + " | Gravidade: " + gravidadeDisco);
+        if (servidor.deveAlertarCpu(gravidadeDisco)) {
+            if (verificarLeiturasConsecutivas(servidor, gravidadeDisco, servidor.getLeiturasParaAlerta())) {
+                alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeDisco, timestamp);
+                alertaGerado = true;
+                System.out.println("ALERTA DISCO - Servidor: " + servidor.getNome() +
+                        " | Gravidade: " + gravidadeDisco +
+                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
+            }
         }
 
         return alertaGerado;
+    }
+
+    private static boolean verificarLeiturasConsecutivas(ServidorConfig servidor, int gravidadeAtual, int leiturasNecessarias) {
+        return servidor.verificarLeiturasConsecutivas(gravidadeAtual, leiturasNecessarias);
     }
 
     private static ServidorArquivo adicionarLinhaAoArquivoServidor(ServidorConfig servidor, String cabecalho, String[] campos) {
@@ -403,11 +427,13 @@ public class Tratamento {
         private String componente;
         private String gravidade;
         private double valor;
+        private int leiturasConsecutivas;
 
-        public MetricaLimite(String componente, String gravidade, double valor) {
+        public MetricaLimite(String componente, String gravidade, double valor, int leiturasConsecutivas) {
             this.componente = componente;
             this.gravidade = gravidade;
             this.valor = valor;
+            this.leiturasConsecutivas = leiturasConsecutivas;
         }
 
         public String getComponente() {

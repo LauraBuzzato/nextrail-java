@@ -10,6 +10,9 @@ public class ServidorConfig {
     private int[] historicoRam;
     private int[] historicoDisco;
     private int posicaoHistorico = 0;
+    private int leiturasConsecutivasAtuais = 0;
+    private int ultimaGravidade = -1;
+
 
     public ServidorConfig(int id, String nome, String empresaNome, int empresaId, int leiturasParaAlerta) {
         this.id = id;
@@ -21,6 +24,23 @@ public class ServidorConfig {
         this.historicoRam = new int[leiturasParaAlerta];
         this.historicoDisco = new int[leiturasParaAlerta];
     }
+
+    public boolean verificarLeiturasConsecutivas(int gravidadeAtual, int leiturasNecessarias) {
+        if (gravidadeAtual == ultimaGravidade && gravidadeAtual > 0) {
+            leiturasConsecutivasAtuais++;
+        } else {
+            leiturasConsecutivasAtuais = 1;
+            ultimaGravidade = gravidadeAtual;
+        }
+
+        return leiturasConsecutivasAtuais >= leiturasNecessarias && gravidadeAtual > 0;
+    }
+
+    public void resetarLeiturasConsecutivas() {
+        leiturasConsecutivasAtuais = 0;
+        ultimaGravidade = -1;
+    }
+
 
     public int getId() {
         return id;

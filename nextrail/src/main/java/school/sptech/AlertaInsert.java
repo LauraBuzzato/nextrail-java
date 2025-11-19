@@ -58,7 +58,7 @@ public class AlertaInsert {
             String sql = "SELECT id, nome_tipo_componente FROM tipo_componente";
             var componentes = con.queryForList(sql);
 
-            System.out.println("=== TODOS OS TIPOS DE COMPONENTES NO BANCO ===");
+            System.out.println("TODOS OS TIPOS DE COMPONENTES NO BANCO");
             for (var comp : componentes) {
                 System.out.printf("ID: %s | Nome: '%s'%n",
                         comp.get("id"), comp.get("nome_tipo_componente"));
@@ -74,12 +74,12 @@ public class AlertaInsert {
             String sql = "SELECT id, nome, fk_empresa FROM servidor";
             var servidores = con.queryForList(sql);
 
-            System.out.println("=== TODOS OS SERVIDORES NO BANCO ===");
+            System.out.println("TODOS OS SERVIDORES NO BANCO");
             for (var serv : servidores) {
                 System.out.printf("ID: %s | Nome: '%s' | Empresa: %s%n",
                         serv.get("id"), serv.get("nome"), serv.get("fk_empresa"));
             }
-            System.out.println("====================================");
+            System.out.println("------------------------------------");
         } catch (Exception e) {
             System.out.println("Erro ao listar servidores: " + e.getMessage());
         }
