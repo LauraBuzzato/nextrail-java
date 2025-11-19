@@ -106,8 +106,8 @@ public class Tratamento {
     private static ServidorConfig buscarServidorNoBanco(JdbcTemplate con, String servidorNome) {
         try {
             String sql = """
-                    SELECT s.id, s.nome, e.razao_social as empresa_nome, e.id as empresa_id,
-                           ls.leituras_consecutivas_para_alerta
+                    SELECT s.id as id, s.nome as nome, e.razao_social as empresa_nome, e.id as empresa_id,
+                           ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
                     FROM servidor s
                     JOIN empresa e ON s.fk_empresa = e.id
                     JOIN leitura_script ls ON ls.fk_servidor = s.id
@@ -131,7 +131,7 @@ public class Tratamento {
         ComponenteLimites limites = new ComponenteLimites();
         try {
             String sql = """
-                    SELECT tc.nome_tipo_componente, g.nome as gravidade, m.valor
+                    SELECT tc.nome_tipo_componente as nome_tipo_componente , g.nome as gravidade, m.valor as valor
                     FROM metrica m
                     JOIN gravidade g ON m.fk_gravidade = g.id
                     JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
