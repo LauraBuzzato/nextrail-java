@@ -31,6 +31,8 @@ public class Tratamento {
         int linhasProcessadas = 0;
         int alertasGerados = 0;
 
+        ServidorArquivo arquivoAtual = null;
+
         try (
                 InputStream rawStream = s3.getObject(
                         GetObjectRequest.builder()
@@ -58,23 +60,26 @@ public class Tratamento {
 
                     if (servidor != null) {
                         ComponenteLimites limites = buscarLimitesServidor(con, servidor.getId());
-                        boolean alertaGerado = processarLinha(campos, servidor, limites, alertaInsert, cabecalho);
+                        arquivoAtual = processarLinha(campos, servidor, limites, alertaInsert, cabecalho);
 
-                        if (alertaGerado) alertasGerados++;
+                        if (arquivoAtual != null) {
+                            boolean alertaGerado = verificarAlertasGerados(campos, servidor, limites, alertaInsert);
+                            if (alertaGerado) alertasGerados++;
+                        }
                         linhasProcessadas++;
                     }
                 }
             }
 
-
+            if (arquivoAtual != null) {
                 S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
                 s3Manager.salvarCSVTrusted(
-                        servidorArq.getEmpresaNome(),
-                        servidorArq.getServidorNome(),
-                        servidorArq.getConteudoCSV()
+                        arquivoAtual.getEmpresaNome(),
+                        arquivoAtual.getServidorNome(),
+                        arquivoAtual.getConteudoCSV()
                 );
-                System.out.println("Arquivo salvo: " + servidorArq.getEmpresaNome() + "/" + servidorArq.getServidorNome());
-        
+                System.out.println("Arquivo salvo: " + arquivoAtual.getEmpresaNome() + "/" + arquivoAtual.getServidorNome());
+            }
 
             System.out.printf("Processamento concluído! Linhas lidas: %d Linhas válidas: %d Alertas gerados: %d%n",
                     linhasTotais, linhasProcessadas, alertasGerados);
@@ -190,15 +195,14 @@ public class Tratamento {
         return limites;
     }
 
-    private static boolean processarLinha(String[] campos, ServidorConfig servidor,
-                                          ComponenteLimites limites, AlertaInsert alertaInsert,
-                                          String cabecalho) {
+    private static ServidorArquivo processarLinha(String[] campos, ServidorConfig servidor,
+                                                  ComponenteLimites limites, AlertaInsert alertaInsert,
+                                                  String cabecalho) {
         String timestamp = formatarData(campos[2].trim());
         String cpuStr = limparValor(campos[4].trim());
         String ramStr = limparValor(campos[5].trim());
         String discoStr = limparValor(campos[8].trim());
 
-        boolean alertaGerado = false;
         int gravidadeCpu = 0;
         int gravidadeRam = 0;
         int gravidadeDisco = 0;
@@ -235,6 +239,49 @@ public class Tratamento {
 
         servidor.adicionarLeitura(gravidadeCpu, gravidadeRam, gravidadeDisco);
 
+        ServidorArquivo arquivo = adicionarLinhaAoArquivoServidor(servidor, cabecalho, campos);
+        return arquivo;
+    }
+
+    private static boolean verificarAlertasGerados(String[] campos, ServidorConfig servidor,
+                                                   ComponenteLimites limites, AlertaInsert alertaInsert) {
+        String timestamp = formatarData(campos[2].trim());
+        String cpuStr = limparValor(campos[4].trim());
+        String ramStr = limparValor(campos[5].trim());
+        String discoStr = limparValor(campos[8].trim());
+
+        boolean alertaGerado = false;
+        int gravidadeCpu = 0;
+        int gravidadeRam = 0;
+        int gravidadeDisco = 0;
+
+        if (!cpuStr.isEmpty()) {
+            try {
+                double cpuValor = Double.parseDouble(cpuStr);
+                gravidadeCpu = limites.verificarGravidadeCpu(cpuValor);
+            } catch (NumberFormatException e) {
+                System.out.println("Valor inválido para CPU: " + cpuStr);
+            }
+        }
+
+        if (!ramStr.isEmpty()) {
+            try {
+                double ramValor = Double.parseDouble(ramStr);
+                gravidadeRam = limites.verificarGravidadeRam(ramValor);
+            } catch (NumberFormatException e) {
+                System.out.println("Valor inválido para RAM: " + ramStr);
+            }
+        }
+
+        if (!discoStr.isEmpty()) {
+            try {
+                double discoValor = Double.parseDouble(discoStr);
+                gravidadeDisco = limites.verificarGravidadeDisco(discoValor);
+            } catch (NumberFormatException e) {
+                System.out.println("Valor inválido para Disco: " + discoStr);
+            }
+        }
+
         if (servidor.deveAlertarCpu(gravidadeCpu)) {
             alertaInsert.inserirAlerta(servidor.getId(), 1, gravidadeCpu, timestamp);
             alertaGerado = true;
@@ -253,11 +300,10 @@ public class Tratamento {
             System.out.println("ALERTA DISCO - Servidor: " + servidor.getNome() + " | Gravidade: " + gravidadeDisco);
         }
 
-        adicionarLinhaAoArquivoServidor(servidor, cabecalho, campos);
         return alertaGerado;
     }
 
-    private static void adicionarLinhaAoArquivoServidor(ServidorConfig servidor, String cabecalho, String[] campos) {
+    private static ServidorArquivo adicionarLinhaAoArquivoServidor(ServidorConfig servidor, String cabecalho, String[] campos) {
         ServidorArquivo arquivo = null;
         for (ServidorArquivo arq : arquivosPorServidor) {
             if (arq.getServidorNome().equals(servidor.getNome())) {
@@ -273,6 +319,8 @@ public class Tratamento {
 
         String linhaTratada = String.join(";", campos);
         arquivo.adicionarLinha(cabecalho, linhaTratada);
+
+        return arquivo;
     }
 
     private static void executarTesteRelatorio(JdbcTemplate con, Notificador notificador) {
