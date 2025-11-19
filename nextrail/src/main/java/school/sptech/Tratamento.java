@@ -164,17 +164,10 @@ public class Tratamento {
                     new MetricaLimite(
                             rs.getString("nome_tipo_componente"),
                             rs.getString("gravidade"),
-                            rs.getDouble("valor"),
-                            0
+                            rs.getDouble("valor")
                     ), servidorId);
 
-            System.out.println("DEBUG: Métricas encontradas para servidor " + servidorId + ": " + metricas.size());
-
             for (MetricaLimite metrica : metricas) {
-                System.out.println("DEBUG: Componente=" + metrica.getComponente() +
-                        ", Gravidade=" + metrica.getGravidade() +
-                        ", Valor=" + metrica.getValor());
-
                 switch (metrica.getComponente()) {
                     case "Cpu":
                         if ("Baixo".equals(metrica.getGravidade())) {
@@ -203,8 +196,6 @@ public class Tratamento {
                             limites.setDiscoLimiteAlto(metrica.getValor());
                         }
                         break;
-                    default:
-                        System.out.println("Componente desconhecido: " + metrica.getComponente());
                 }
             }
 
@@ -430,13 +421,11 @@ public class Tratamento {
         private String componente;
         private String gravidade;
         private double valor;
-        private int leiturasConsecutivas;
 
-        public MetricaLimite(String componente, String gravidade, double valor, int leiturasConsecutivas) {
+        public MetricaLimite(String componente, String gravidade, double valor) {
             this.componente = componente;
             this.gravidade = gravidade;
             this.valor = valor;
-            this.leiturasConsecutivas = leiturasConsecutivas;
         }
 
         public String getComponente() {
