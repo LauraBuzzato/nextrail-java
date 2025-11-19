@@ -54,7 +54,7 @@ public class Tratamento {
                 linha = limparLinha(linha);
                 String[] campos = linha.split(";");
 
-                if (campos.length >= 10) {
+                if (campos.length >= 11) {
                     String servidorNomeCSV = campos[1].trim();
                     ServidorConfig servidor = buscarOuCriarServidor(con, servidorNomeCSV);
 
@@ -198,6 +198,12 @@ public class Tratamento {
     private static ServidorArquivo processarLinha(String[] campos, ServidorConfig servidor,
                                                   ComponenteLimites limites, AlertaInsert alertaInsert,
                                                   String cabecalho) {
+        
+        String memoryAvailableGB = converterParaGB(campos[6].trim());
+        String diskAvailableGB = converterParaGB(campos[9].trim());
+        campos[6] = memoryAvailableGB;
+        campos[9] = diskAvailableGB;
+
         String timestamp = formatarData(campos[2].trim());
         String cpuStr = limparValor(campos[4].trim());
         String ramStr = limparValor(campos[5].trim());
@@ -356,12 +362,26 @@ public class Tratamento {
         return valor;
     }
 
-    private static String limparGB(String valor) {
-        valor = valor.replace("G", "").replace("M", "").trim();
+    private static String converterParaGB(String valorHumano) {
+        if (valorHumano == null || valorHumano.isEmpty()) return "";
+
         try {
-            Double.parseDouble(valor);
-            return valor;
+            valorHumano = valorHumano.toUpperCase().trim();
+            double valor;
+
+            if (valorHumano.endsWith("G")) {
+                valor = Double.parseDouble(valorHumano.replace("G", "").trim());
+            } else if (valorHumano.endsWith("M")) {
+                valor = Double.parseDouble(valorHumano.replace("M", "").trim()) / 1024.0;
+            } else if (valorHumano.endsWith("K")) {
+                valor = Double.parseDouble(valorHumano.replace("K", "").trim()) / (1024.0 * 1024.0);
+            } else {
+                valor = Double.parseDouble(valorHumano) / (1024.0 * 1024.0 * 1024.0);
+            }
+
+            return String.format("%.2f", valor);
         } catch (NumberFormatException e) {
+            System.out.println("Valor inválido para conversão GB: " + valorHumano);
             return "";
         }
     }
