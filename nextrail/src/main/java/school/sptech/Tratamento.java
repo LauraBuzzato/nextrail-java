@@ -111,14 +111,16 @@ public class Tratamento {
     private static ServidorConfig buscarServidorNoBanco(JdbcTemplate con, String servidorNome) {
         try {
             String sql = """
-                    SELECT s.id as id, s.nome as nome, e.razao_social as empresa_nome, e.id as empresa_id,
-                           ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
-                    FROM servidor s
-                    JOIN empresa e ON s.fk_empresa = e.id
-                    JOIN leitura_script ls ON ls.fk_servidor = s.id
-                    WHERE s.nome = ?
-                    """;
-            return con.queryForObject(sql, (rs, rowNum) ->
+                SELECT DISTINCT s.id as id, s.nome as nome, e.razao_social as empresa_nome, 
+                       e.id as empresa_id, ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
+                FROM servidor s
+                JOIN empresa e ON s.fk_empresa = e.id
+                JOIN leitura_script ls ON ls.fk_servidor = s.id
+                WHERE s.nome = ?
+                LIMIT 1
+                """;
+
+            List<ServidorConfig> resultados = con.query(sql, (rs, rowNum) ->
                     new ServidorConfig(
                             rs.getInt("id"),
                             rs.getString("nome"),
@@ -126,6 +128,9 @@ public class Tratamento {
                             rs.getInt("empresa_id"),
                             rs.getInt("leituras_consecutivas_para_alerta")
                     ), servidorNome);
+
+            return resultados.isEmpty() ? null : resultados.get(0);
+
         } catch (Exception e) {
             System.out.println("Erro ao buscar servidor '" + servidorNome + "': " + e.getMessage());
             return null;
@@ -136,21 +141,20 @@ public class Tratamento {
         ComponenteLimites limites = new ComponenteLimites();
         try {
             String sql = """
-                    SELECT tc.nome_tipo_componente as nome_tipo_componente , g.nome as gravidade, m.valor as valor
-                    FROM metrica m
-                    JOIN gravidade g ON m.fk_gravidade = g.id
-                    JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
-                    WHERE m.fk_componenteServidor_servidor = ?
-                    ORDER BY tc.nome_tipo_componente, g.nome
-                    """;
-            List<MetricaLimite> metricas = new ArrayList<>();
-            con.query(sql, (rs) -> {
-                metricas.add(new MetricaLimite(
-                        rs.getString("nome_tipo_componente"),
-                        rs.getString("gravidade"),
-                        rs.getDouble("valor")
-                ));
-            }, servidorId);
+                SELECT tc.nome_tipo_componente as nome_tipo_componente, g.nome as gravidade, m.valor as valor
+                FROM metrica m
+                JOIN gravidade g ON m.fk_gravidade = g.id
+                JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
+                WHERE m.fk_componenteServidor_servidor = ?
+                ORDER BY tc.nome_tipo_componente, g.nome
+                """;
+
+            List<MetricaLimite> metricas = con.query(sql, (rs, rowNum) ->
+                    new MetricaLimite(
+                            rs.getString("nome_tipo_componente"),
+                            rs.getString("gravidade"),
+                            rs.getDouble("valor")
+                    ), servidorId);
 
             for (MetricaLimite metrica : metricas) {
                 switch (metrica.getComponente()) {
@@ -191,6 +195,7 @@ public class Tratamento {
 
         } catch (Exception e) {
             System.out.println("Erro ao buscar limites: " + e.getMessage());
+            e.printStackTrace();
         }
         return limites;
     }
@@ -198,7 +203,7 @@ public class Tratamento {
     private static ServidorArquivo processarLinha(String[] campos, ServidorConfig servidor,
                                                   ComponenteLimites limites, AlertaInsert alertaInsert,
                                                   String cabecalho) {
-        
+
         String memoryAvailableGB = converterParaGB(campos[6].trim());
         String diskAvailableGB = converterParaGB(campos[9].trim());
         campos[6] = memoryAvailableGB;
@@ -362,26 +367,26 @@ public class Tratamento {
         return valor;
     }
 
-    private static String converterParaGB(String valorHumano) {
-        if (valorHumano == null || valorHumano.isEmpty()) return "";
+    private static String converterParaGB(String valorFormat) {
+        if (valorFormat == null || valorFormat.isEmpty()) return "";
 
         try {
-            valorHumano = valorHumano.toUpperCase().trim();
+            valorFormat = valorFormat.toUpperCase().trim();
             double valor;
 
-            if (valorHumano.endsWith("G")) {
-                valor = Double.parseDouble(valorHumano.replace("G", "").trim());
-            } else if (valorHumano.endsWith("M")) {
-                valor = Double.parseDouble(valorHumano.replace("M", "").trim()) / 1024.0;
-            } else if (valorHumano.endsWith("K")) {
-                valor = Double.parseDouble(valorHumano.replace("K", "").trim()) / (1024.0 * 1024.0);
+            if (valorFormat.endsWith("G")) {
+                valor = Double.parseDouble(valorFormat.replace("G", "").trim());
+            } else if (valorFormat.endsWith("M")) {
+                valor = Double.parseDouble(valorFormat.replace("M", "").trim()) / 1024.0;
+            } else if (valorFormat.endsWith("K")) {
+                valor = Double.parseDouble(valorFormat.replace("K", "").trim()) / (1024.0 * 1024.0);
             } else {
-                valor = Double.parseDouble(valorHumano) / (1024.0 * 1024.0 * 1024.0);
+                valor = Double.parseDouble(valorFormat) / (1024.0 * 1024.0 * 1024.0);
             }
 
             return String.format("%.2f", valor);
         } catch (NumberFormatException e) {
-            System.out.println("Valor inválido para conversão GB: " + valorHumano);
+            System.out.println("Valor inválido para conversão GB: " + valorFormat);
             return "";
         }
     }
