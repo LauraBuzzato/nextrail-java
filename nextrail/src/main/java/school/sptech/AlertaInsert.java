@@ -63,7 +63,7 @@ public class AlertaInsert {
                 System.out.printf("ID: %s | Nome: '%s'%n",
                         comp.get("id"), comp.get("nome_tipo_componente"));
             }
-            System.out.println("=============================================");
+            System.out.println("-----------------------------------------");
         } catch (Exception e) {
             System.out.println("Erro ao listar tipos componentes: " + e.getMessage());
         }

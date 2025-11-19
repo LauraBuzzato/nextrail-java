@@ -31,6 +31,8 @@ public class Tratamento {
         int linhasProcessadas = 0;
         int alertasGerados = 0;
 
+        List<String> servidoresProcessados = new ArrayList<>();
+
         ServidorArquivo arquivoAtual = null;
 
         try (
@@ -59,6 +61,10 @@ public class Tratamento {
                     ServidorConfig servidor = buscarOuCriarServidor(con, servidorNomeCSV);
 
                     if (servidor != null) {
+                        if (!servidoresProcessados.contains(servidor.getNome())) {
+                            servidoresProcessados.add(servidor.getNome());
+                        }
+
                         ComponenteLimites limites = buscarLimitesServidor(con, servidor.getId());
                         arquivoAtual = processarLinha(campos, servidor, limites, alertaInsert, cabecalho);
 
@@ -71,21 +77,24 @@ public class Tratamento {
                 }
             }
 
-            if (arquivoAtual != null) {
+            for (ServidorArquivo arquivo : arquivosPorServidor) {
                 S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
                 s3Manager.salvarCSVTrusted(
-                        arquivoAtual.getEmpresaNome(),
-                        arquivoAtual.getServidorNome(),
-                        arquivoAtual.getConteudoCSV()
+                        arquivo.getEmpresaNome(),
+                        arquivo.getServidorNome(),
+                        arquivo.getConteudoCSV()
                 );
-                System.out.println("Arquivo salvo: " + arquivoAtual.getEmpresaNome() + "/" + arquivoAtual.getServidorNome());
+                System.out.println("Arquivo salvo: " + arquivo.getEmpresaNome() + "/" + arquivo.getServidorNome());
             }
 
             System.out.printf("Processamento concluído! Linhas lidas: %d Linhas válidas: %d Alertas gerados: %d%n",
                     linhasTotais, linhasProcessadas, alertasGerados);
 
-            System.out.println("EXECUTANDO TESTE DO RELATÓRIO...");
-            executarTesteRelatorio(con, notificador);
+            System.out.println("Servidores processados: " + servidoresProcessados);
+
+            System.out.println("RELATÓRIO APÓS PROCESSAMENTO...");
+            RelatorioAlertas relatorio = new RelatorioAlertas(con, notificador);
+            relatorio.gerarRelatorioAposProcessamento(servidoresProcessados);
 
         } catch (Exception e) {
             System.out.println("Erro ao processar CSV: " + e.getMessage());
@@ -111,14 +120,14 @@ public class Tratamento {
     private static ServidorConfig buscarServidorNoBanco(JdbcTemplate con, String servidorNome) {
         try {
             String sql = """
-                SELECT DISTINCT s.id as id, s.nome as nome, e.razao_social as empresa_nome, 
-                       e.id as empresa_id, ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
-                FROM servidor s
-                JOIN empresa e ON s.fk_empresa = e.id
-                JOIN leitura_script ls ON ls.fk_servidor = s.id
-                WHERE s.nome = ?
-                LIMIT 1
-                """;
+                    SELECT DISTINCT s.id as id, s.nome as nome, e.razao_social as empresa_nome, 
+                           e.id as empresa_id, ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
+                    FROM servidor s
+                    JOIN empresa e ON s.fk_empresa = e.id
+                    JOIN leitura_script ls ON ls.fk_servidor = s.id
+                    WHERE s.nome = ?
+                    LIMIT 1
+                    """;
 
             List<ServidorConfig> resultados = con.query(sql, (rs, rowNum) ->
                     new ServidorConfig(
@@ -141,13 +150,13 @@ public class Tratamento {
         ComponenteLimites limites = new ComponenteLimites();
         try {
             String sql = """
-                SELECT tc.nome_tipo_componente as nome_tipo_componente, g.nome as gravidade, m.valor as valor
-                FROM metrica m
-                JOIN gravidade g ON m.fk_gravidade = g.id
-                JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
-                WHERE m.fk_componenteServidor_servidor = ?
-                ORDER BY tc.nome_tipo_componente, g.nome
-                """;
+                    SELECT tc.nome_tipo_componente as nome_tipo_componente, g.nome as gravidade, m.valor as valor
+                    FROM metrica m
+                    JOIN gravidade g ON m.fk_gravidade = g.id
+                    JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
+                    WHERE m.fk_componenteServidor_servidor = ?
+                    ORDER BY tc.nome_tipo_componente, g.nome
+                    """;
 
             List<MetricaLimite> metricas = con.query(sql, (rs, rowNum) ->
                     new MetricaLimite(
@@ -242,7 +251,7 @@ public class Tratamento {
             try {
                 double discoValor = Double.parseDouble(discoStr);
                 gravidadeDisco = limites.verificarGravidadeDisco(discoValor);
-                System.out.printf("Disco: %.1f%% → Gravidade: %d%n", discoValor, gravidadeDisco);
+                System.out.printf("Disco: %.1f%% | Gravidade: %d%n", discoValor, gravidadeDisco);
             } catch (NumberFormatException e) {
                 System.out.println("Valor inválido para Disco: " + discoStr);
             }
@@ -332,17 +341,6 @@ public class Tratamento {
         arquivo.adicionarLinha(cabecalho, linhaTratada);
 
         return arquivo;
-    }
-
-    private static void executarTesteRelatorio(JdbcTemplate con, Notificador notificador) {
-        try {
-            System.out.println("Gerando relatório de teste...");
-            RelatorioAlertas relatorio = new RelatorioAlertas(con, notificador);
-            relatorio.gerarRelatorioTeste();
-            System.out.println("Teste do relatório concluído!");
-        } catch (Exception e) {
-            System.out.println("Erro ao executar teste do relatório: " + e.getMessage());
-        }
     }
 
     private static String limparLinha(String linha) {

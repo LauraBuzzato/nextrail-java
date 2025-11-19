@@ -24,10 +24,9 @@ public class S3Manager {
 
 
             String dataAtual = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH-mm-ss"));
 
             String key = String.format("%s/%s/coleta_%s_%s.csv",
-                    empresaFolder, servidorFolder, dataAtual, timestamp);
+                    empresaFolder, servidorFolder, dataAtual);
 
 
             s3.putObject(

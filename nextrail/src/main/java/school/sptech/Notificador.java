@@ -47,7 +47,7 @@ public class Notificador {
 
     public void criarJira(String titulo, String descricao) {
 
-        String[] tiposIssue = {"Incident", "Problem", "Task", "Bug", "Story", "Change"};
+        String[] tiposIssue = {"Bug"};
 
         for (String tipo : tiposIssue) {
             if (tentarCriarJiraComTipo(titulo, descricao, tipo)) {

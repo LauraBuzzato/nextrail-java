@@ -14,23 +14,21 @@ public class RelatorioAlertas {
     }
 
 
-    public void gerarRelatorioTeste() {
-        System.out.println("GERANDO RELATÓRIO DE TESTE");
-        gerarEEnviarRelatorio();
-        System.out.println("Relatório de teste enviado para Slack/Jira!");
+    public void gerarRelatorioAposProcessamento(List<String> servidoresProcessados) {
+        System.out.println("GERANDO RELATÓRIO APÓS PROCESSAMENTO DO CSV");
+        gerarEEnviarRelatorioFiltrado(servidoresProcessados);
+        System.out.println("Relatório pós-processamento enviado para Slack/Jira!");
     }
 
-
     private void gerarEEnviarRelatorio() {
-        System.out.println("Gerando relatório consolidado...");
-
+        System.out.println("Gerando relatório");
 
         String sqlServidores = """
                 SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
                 FROM alerta a
                 JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
                 JOIN empresa e ON s.fk_empresa = e.id
-                WHERE a.inicio >= NOW() - INTERVAL 1 MONTH
+                WHERE a.inicio >= NOW() - INTERVAL 1 HOUR
                 """;
 
         List<Map<String, Object>> servidores = con.queryForList(sqlServidores);
@@ -49,11 +47,8 @@ public class RelatorioAlertas {
             String servidorNome = (String) servidor.get("servidorNome");
             String empresaNome = (String) servidor.get("empresaNome");
 
-
             Map<String, Integer> contadorGravidade = contarAlertasPorGravidade(servidorId);
-
             Set<String> componentesAlto = buscarComponentesComAlertaAlto(servidorId);
-
 
             StringBuilder mensagem = new StringBuilder();
             mensagem.append("*RELATÓRIO DE ALERTAS - ÚLTIMA HORA*\n");
@@ -75,7 +70,6 @@ public class RelatorioAlertas {
             System.out.println("RELATÓRIO:");
             System.out.println(mensagem);
 
-
             notificador.enviarRelatorioConsolidado(
                     "Relatório de Alertas - " + servidorNome,
                     mensagem.toString()
@@ -83,6 +77,69 @@ public class RelatorioAlertas {
         }
     }
 
+    private void gerarEEnviarRelatorioFiltrado(List<String> servidoresProcessados) {
+        System.out.println("Gerando relatório filtrado para servidores processados: " + servidoresProcessados);
+
+        if (servidoresProcessados.isEmpty()) {
+            System.out.println("Nenhum servidor processado para gerar relatório.");
+            notificador.enviarRelatorioConsolidado(
+                    "Relatório - Processamento CSV",
+                    "Nenhum servidor processado no CSV."
+            );
+            return;
+        }
+
+        String placeholders = String.join(",", Collections.nCopies(servidoresProcessados.size(), "?"));
+
+        String sqlServidores = """
+        SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
+        FROM alerta a
+        JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
+        JOIN empresa e ON s.fk_empresa = e.id
+        WHERE s.nome IN (""" + placeholders + ") " + """
+        AND a.inicio >= NOW() - INTERVAL 1 HOUR
+        """;
+        List<Map<String, Object>> servidores = con.queryForList(sqlServidores, servidoresProcessados.toArray());
+
+        StringBuilder relatorioConsolidado = new StringBuilder();
+        relatorioConsolidado.append("*RELATÓRIO - PROCESSAMENTO CSV*\n");
+        relatorioConsolidado.append("Servidores processados: ").append(String.join(", ", servidoresProcessados)).append("\n");
+        relatorioConsolidado.append("------------------------------------------\n");
+
+        if (servidores.isEmpty()) {
+            relatorioConsolidado.append("Nenhum alerta gerado durante o processamento.\n");
+        } else {
+            for (Map<String, Object> servidor : servidores) {
+                Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
+                String servidorNome = (String) servidor.get("servidorNome");
+                String empresaNome = (String) servidor.get("empresaNome");
+
+                Map<String, Integer> contadorGravidade = contarAlertasPorGravidade(servidorId);
+                Set<String> componentesAlto = buscarComponentesComAlertaAlto(servidorId);
+
+                relatorioConsolidado.append("Empresa: ").append(empresaNome).append("\n");
+                relatorioConsolidado.append("Servidor: ").append(servidorNome).append("\n");
+                relatorioConsolidado.append("Alertas - Baixo: ").append(contadorGravidade.get("Baixo"))
+                        .append(" | Médio: ").append(contadorGravidade.get("Médio"))
+                        .append(" | Alto: ").append(contadorGravidade.get("Alto")).append("\n");
+
+                if (!componentesAlto.isEmpty()) {
+                    relatorioConsolidado.append("Componentes com ALERTA ALTO: ").append(String.join(", ", componentesAlto)).append("\n");
+                }
+                relatorioConsolidado.append("----------------------------------------\n");
+            }
+        }
+
+        relatorioConsolidado.append("Período: Última hora\n");
+
+        System.out.println("RELATÓRIO CONSOLIDADO:");
+        System.out.println(relatorioConsolidado);
+
+        notificador.enviarRelatorioConsolidado(
+                "Relatório - Processamento CSV",
+                relatorioConsolidado.toString()
+        );
+    }
 
     private Map<String, Integer> contarAlertasPorGravidade(Integer servidorId) {
         Map<String, Integer> contador = new HashMap<>();
@@ -96,7 +153,7 @@ public class RelatorioAlertas {
                     FROM alerta a
                     JOIN gravidade g ON a.fk_gravidade = g.id
                     WHERE a.fk_componenteServidor_servidor = ?
-                    AND a.inicio >= NOW() - INTERVAL 1 MONTH
+                    AND a.inicio >= NOW() - INTERVAL 1 HOUR
                     GROUP BY g.id, g.nome
                     """;
 
@@ -120,7 +177,6 @@ public class RelatorioAlertas {
         return contador;
     }
 
-
     private Set<String> buscarComponentesComAlertaAlto(Integer servidorId) {
         Set<String> componentes = new HashSet<>();
 
@@ -131,7 +187,7 @@ public class RelatorioAlertas {
                     JOIN tipo_componente tc ON a.fk_componenteServidor_tipoComponente = tc.id
                     WHERE a.fk_componenteServidor_servidor = ?
                     AND a.fk_gravidade = 3  -- Alto
-                    AND a.inicio >= NOW() - INTERVAL 1 MONTH
+                    AND a.inicio >= NOW() - INTERVAL 1 HOUR
                     """;
 
             List<Map<String, Object>> resultados = con.queryForList(sql, servidorId);
@@ -149,7 +205,6 @@ public class RelatorioAlertas {
         return componentes;
     }
 
-
     public void debugDadosAlertas() {
         System.out.println("=== DEBUG: DADOS DE ALERTAS NO BANCO ===");
 
@@ -164,7 +219,7 @@ public class RelatorioAlertas {
                 JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
                 JOIN tipo_componente tc ON a.fk_componenteServidor_tipoComponente = tc.id
                 JOIN gravidade g ON a.fk_gravidade = g.id
-                WHERE a.inicio >= NOW() - INTERVAL 1 MONTH
+                WHERE a.inicio >= NOW() - INTERVAL 1 HOUR
                 GROUP BY s.id, s.nome, tc.id, tc.nome_tipo_componente, g.id, g.nome, a.inicio
                 ORDER BY a.inicio DESC
                 LIMIT 10
