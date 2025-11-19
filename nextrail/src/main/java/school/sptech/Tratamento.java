@@ -150,31 +150,33 @@ public class Tratamento {
         ComponenteLimites limites = new ComponenteLimites();
         try {
             String sql = """
-                SELECT tc.nome_tipo_componente as nome_tipo_componente, 
-                       g.nome as gravidade, 
-                       m.valor as valor,
-                       ls.leituras_consecutivas_para_alerta
-                FROM metrica m
-                JOIN gravidade g ON m.fk_gravidade = g.id
-                JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
-                JOIN componente_servidor cs ON m.fk_componenteServidor_servidor = cs.fk_servidor 
-                    AND m.fk_componenteServidor_tipoComponente = cs.fk_tipo_componente
-                JOIN leitura_script ls ON ls.fk_servidor = cs.fk_servidor
-                WHERE m.fk_componenteServidor_servidor = ?
-                ORDER BY tc.nome_tipo_componente, g.nome
-                """;
+            SELECT tc.nome_tipo_componente as nome_tipo_componente, 
+                   g.nome as gravidade, 
+                   m.valor as valor
+            FROM metrica m
+            JOIN gravidade g ON m.fk_gravidade = g.id
+            JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
+            WHERE m.fk_componenteServidor_servidor = ?
+            ORDER BY tc.nome_tipo_componente, g.id
+            """;
 
             List<MetricaLimite> metricas = con.query(sql, (rs, rowNum) ->
                     new MetricaLimite(
                             rs.getString("nome_tipo_componente"),
                             rs.getString("gravidade"),
                             rs.getDouble("valor"),
-                            rs.getInt("leituras_consecutivas_para_alerta")
+                            0
                     ), servidorId);
 
+            System.out.println("DEBUG: Métricas encontradas para servidor " + servidorId + ": " + metricas.size());
+
             for (MetricaLimite metrica : metricas) {
+                System.out.println("DEBUG: Componente=" + metrica.getComponente() +
+                        ", Gravidade=" + metrica.getGravidade() +
+                        ", Valor=" + metrica.getValor());
+
                 switch (metrica.getComponente()) {
-                    case "CPU":
+                    case "Cpu":
                         if ("Baixo".equals(metrica.getGravidade())) {
                             limites.setCpuLimiteBaixo(metrica.getValor());
                         } else if ("Médio".equals(metrica.getGravidade())) {
@@ -183,7 +185,7 @@ public class Tratamento {
                             limites.setCpuLimiteAlto(metrica.getValor());
                         }
                         break;
-                    case "RAM":
+                    case "Ram":
                         if ("Baixo".equals(metrica.getGravidade())) {
                             limites.setRamLimiteBaixo(metrica.getValor());
                         } else if ("Médio".equals(metrica.getGravidade())) {
@@ -201,6 +203,8 @@ public class Tratamento {
                             limites.setDiscoLimiteAlto(metrica.getValor());
                         }
                         break;
+                    default:
+                        System.out.println("Componente desconhecido: " + metrica.getComponente());
                 }
             }
 
