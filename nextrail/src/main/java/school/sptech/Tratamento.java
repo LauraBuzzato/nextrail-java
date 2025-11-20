@@ -3,11 +3,14 @@ package school.sptech;
 import org.springframework.jdbc.core.JdbcTemplate;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,7 +27,6 @@ public class Tratamento {
         S3Client s3 = S3Client.create();
 
         String bucketRaw = "bucket-teste-python";
-        String keyRaw = "machine_data_2025-11-19.csv";
         String bucketTrusted = "bucket-trusted-teste-tratamento";
 
         int linhasTotais = 0;
@@ -34,6 +36,19 @@ public class Tratamento {
         List<String> servidoresProcessados = new ArrayList<>();
 
         ServidorArquivo arquivoAtual = null;
+
+        S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
+
+        S3Object arquivoMaisRecente = s3Manager.encontrarArquivoMaisRecente(bucketRaw, "");
+
+        String keyRaw;
+        if (arquivoMaisRecente != null) {
+            keyRaw = arquivoMaisRecente.key();
+            System.out.println("chave arquivo: " + keyRaw);
+        } else {
+            keyRaw = s3Manager.gerarNomeComDataAtual();
+            System.out.println("Nenhum arquivo recente encontrado. Usando: " + keyRaw);
+        }
 
         try (
                 InputStream rawStream = s3.getObject(
@@ -78,7 +93,6 @@ public class Tratamento {
             }
 
             for (ServidorArquivo arquivo : arquivosPorServidor) {
-                S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
                 s3Manager.salvarCSVTrusted(
                         arquivo.getEmpresaNome(),
                         arquivo.getServidorNome(),
@@ -215,15 +229,24 @@ public class Tratamento {
                                                   ComponenteLimites limites, AlertaInsert alertaInsert,
                                                   String cabecalho) {
 
+        // Converter memória e disco para GB
         String memoryAvailableGB = converterParaGB(campos[6].trim());
         String diskAvailableGB = converterParaGB(campos[9].trim());
         campos[6] = memoryAvailableGB;
         campos[9] = diskAvailableGB;
 
+        // Formatar timestamp
         String timestamp = formatarData(campos[2].trim());
+        campos[2] = timestamp;
+
+        // Limpar e processar valores
         String cpuStr = limparValor(campos[4].trim());
         String ramStr = limparValor(campos[5].trim());
         String discoStr = limparValor(campos[8].trim());
+
+        // Formatar latência para 1 casa decimal (campo 10)
+        String latenciaStr = formatarLatencia(campos[10].trim());
+        campos[10] = latenciaStr;
 
         int gravidadeCpu = 0;
         int gravidadeRam = 0;
@@ -340,7 +363,6 @@ public class Tratamento {
         return alertaGerado;
     }
 
-
     private static ServidorArquivo adicionarLinhaAoArquivoServidor(ServidorConfig servidor, String cabecalho, String[] campos) {
         ServidorArquivo arquivo = null;
         for (ServidorArquivo arq : arquivosPorServidor) {
@@ -381,6 +403,20 @@ public class Tratamento {
     private static String limparValor(String valor) {
         if (valor.equals("0.0") || valor.equals("0") || valor.isEmpty()) return "";
         return valor;
+    }
+
+    private static String formatarLatencia(String latencia) {
+        if (latencia == null || latencia.isEmpty() || latencia.equals("0.0") || latencia.equals("0")) {
+            return "";
+        }
+
+        try {
+            double latenciaValor = Double.parseDouble(latencia);
+            return String.format("%.1f", latenciaValor);
+        } catch (NumberFormatException e) {
+            System.out.println("Valor inválido para latência: " + latencia);
+            return "";
+        }
     }
 
     private static String converterParaGB(String valorFormat) {
