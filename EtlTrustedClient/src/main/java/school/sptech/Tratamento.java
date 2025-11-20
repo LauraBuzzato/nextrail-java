@@ -1,13 +1,14 @@
 package school.sptech;
 
 import software.amazon.awssdk.services.s3.model.*;
-
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 public class Tratamento {
 
     private static final String TRUSTED_BUCKET = "bucket-trusted-teste-tratamento";
-    private static final String CLIENT_BUCKET = "bucket-client-teste-etl";
+    private static final String CLIENT_BUCKET  = "bucket-client-teste-etl";
 
     private static final S3Service s3 = new S3Service();
 
@@ -25,16 +26,13 @@ public class Tratamento {
 
         for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
             String empresa = empresaPrefix.prefix();
-            System.out.println("Empresa: " + empresa);
 
-            // servidores da empresa
-            ListObjectsV2Response servidores = s3.listarComPrefixo(TRUSTED_BUCKET, empresa, true);
+            ListObjectsV2Response servidores =
+                    s3.listarComPrefixo(TRUSTED_BUCKET, empresa, true);
 
             for (CommonPrefix servidorPrefix : servidores.commonPrefixes()) {
                 String servidor = servidorPrefix.prefix();
-                System.out.println("  Servidor: " + servidor);
 
-                // arquivos dentro do servidor (CSV)
                 ListObjectsV2Response arquivos =
                         s3.listarComPrefixo(TRUSTED_BUCKET, servidor, false);
 
@@ -44,23 +42,38 @@ public class Tratamento {
                         continue;
                     }
 
-                    System.out.println("    Convertendo: " + arquivo.key());
-
-                    // Baixar CSV
+                    // Baixar CSV do dia
                     String csv = s3.baixarArquivo(TRUSTED_BUCKET, arquivo.key()).asUtf8String();
 
-                    // Converter CSV → JSON
-                    String json = CsvConverter.csvToJson(csv);
+                    // Converter CSV do dia
+                    List<Map<String, String>> dadosDoDia = CsvConverter.csvToList(csv);
 
-                    // Criar JSON mensal
-                    String jsonMensalKey = MontarKey.gerarMensalKey(arquivo.key(), hoje);
-                    s3.enviarJson(CLIENT_BUCKET, jsonMensalKey, json);
-                    System.out.println("    -> JSON MENSAL: " + jsonMensalKey);
+                    // Mensal
 
-                    // Criar JSON anual
-                    String jsonAnualKey = MontarKey.gerarAnualKey(arquivo.key(), hoje);
-                    s3.enviarJson(CLIENT_BUCKET, jsonAnualKey, json);
-                    System.out.println("    -> JSON ANUAL: " + jsonAnualKey);
+                    String chaveMensal = MontarKey.gerarMensalKey(arquivo.key(), hoje);
+
+                    // Carregar JSON mensal existente (se houver)
+                    List<Map<String, String>> existenteMensal = s3.baixarJsonLista(CLIENT_BUCKET, chaveMensal);
+
+                    // Junta os dois
+                    existenteMensal.addAll(dadosDoDia);
+
+                    // Envia para o S3
+                    s3.enviarJsonLista(CLIENT_BUCKET, chaveMensal, existenteMensal);
+
+                    System.out.println("MENSAL atualizado: " + chaveMensal);
+
+                    // Anual
+
+                    String chaveAnual = MontarKey.gerarAnualKey(arquivo.key(), hoje);
+
+                    List<Map<String, String>> existenteAnual = s3.baixarJsonLista(CLIENT_BUCKET, chaveAnual);
+
+                    existenteAnual.addAll(dadosDoDia);
+
+                    s3.enviarJsonLista(CLIENT_BUCKET, chaveAnual, existenteAnual);
+
+                    System.out.println("ANUAL atualizado: " + chaveAnual);
                 }
             }
         }

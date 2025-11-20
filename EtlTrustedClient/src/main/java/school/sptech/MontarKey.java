@@ -4,30 +4,27 @@ import java.time.LocalDate;
 
 public class MontarKey {
 
-    public static String gerarMensalKey(String csvKey, LocalDate hoje) {
+    public static String gerarMensalKey(String csvKey, LocalDate data) {
 
         String[] partes = csvKey.split("/");
 
         String empresa  = partes[0];
         String servidor = partes[1];
 
-        String nomeArquivo = String.format("coleta_%d-%02d.json",
-                hoje.getYear(), hoje.getMonthValue());
-
-        return String.format("dadosDashComponentes/%s/%s/%s",
-                empresa, servidor, nomeArquivo);
+        return String.format("dadosDashComponentes/%s/%s/mensal_%d-%02d.json",
+                empresa, servidor,
+                data.getYear(), data.getMonthValue());
     }
 
-    public static String gerarAnualKey(String csvKey, LocalDate hoje) {
+    public static String gerarAnualKey(String csvKey, LocalDate data) {
 
         String[] partes = csvKey.split("/");
 
         String empresa  = partes[0];
         String servidor = partes[1];
 
-        String nomeArquivo = String.format("coleta_%d.json", hoje.getYear());
-
-        return String.format("dadosDashComponentes/%s/%s/%s",
-                empresa, servidor, nomeArquivo);
+        return String.format("dadosDashComponentes/%s/%s/anual_%d.json",
+                empresa, servidor,
+                data.getYear());
     }
 }
