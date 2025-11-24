@@ -14,6 +14,7 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class Tratamento {
@@ -78,6 +79,7 @@ public class Tratamento {
                                              S3Manager s3Manager) {
         int linhasTotais = 0;
         int linhasProcessadas = 0;
+        int linhasNovas = 0;
         int alertasGerados = 0;
 
         try (InputStream rawStream = s3.getObject(
@@ -94,6 +96,7 @@ public class Tratamento {
             }
 
             System.out.println("Cabecalho machine_data: " + cabecalho);
+            carregarUltimosTimestamps(s3Manager, dataAtual, cabecalho);
 
             List<String[]> linhasParaProcessar = new ArrayList<>();
             String linha;
@@ -105,16 +108,19 @@ public class Tratamento {
 
                 String[] campos = linha.split(";");
                 if (campos.length >= 11) {
-                    linhasParaProcessar.add(campos);
                     String servidorNomeCSV = campos[1].trim();
-                    ServidorConfig servidor = buscarOuCriarServidor(con, servidorNomeCSV);
-                    if (servidor != null && !servidoresProcessados.contains(servidor.getNome())) {
-                        servidoresProcessados.add(servidor.getNome());
+                    String timestampRaw = campos[2].trim();
+                    if (ehLinhaNova(servidorNomeCSV, timestampRaw)) {
+                        linhasParaProcessar.add(campos);
+                        linhasNovas++;
+
+                        ServidorConfig servidor = buscarOuCriarServidor(con, servidorNomeCSV);
+                        if (servidor != null && !servidoresProcessados.contains(servidor.getNome())) {
+                            servidoresProcessados.add(servidor.getNome());
+                        }
                     }
                 }
             }
-
-            carregarArquivosExistentes(s3Manager, dataAtual, cabecalho);
 
             for (String[] campos : linhasParaProcessar) {
                 String servidorNomeCSV = campos[1].trim();
@@ -132,12 +138,88 @@ public class Tratamento {
                 }
             }
 
-            System.out.printf("Machine_data processado! Linhas lidas: %d Linhas válidas: %d Alertas gerados: %d%n",
-                    linhasTotais, linhasProcessadas, alertasGerados);
+            System.out.printf("Machine_data processado! Linhas lidas: %d | Linhas novas: %d | Linhas processadas: %d | Alertas gerados: %d%n",
+                    linhasTotais, linhasNovas, linhasProcessadas, alertasGerados);
 
         } catch (Exception e) {
             System.out.println("Erro ao processar machine_data: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private static void carregarUltimosTimestamps(S3Manager s3Manager, String data, String cabecalho) {
+        System.out.println("Carregando últimos timestamps do bucket trusted para a data: " + data);
+
+        if (servidoresConfig.isEmpty()) {
+            System.out.println("Nenhum servidor identificado para carregar timestamps.");
+            return;
+        }
+
+        for (ServidorConfig servidor : servidoresConfig) {
+            String empresaFolder = formatarNome(servidor.getEmpresaNome());
+            String servidorFolder = formatarNome(servidor.getNome());
+
+            String keyPrincipal = String.format("%s/%s/coleta_%s.csv",
+                    empresaFolder, servidorFolder, data);
+
+            String conteudoExistente = s3Manager.lerCSVExistente(keyPrincipal);
+
+            ServidorArquivo arquivo = buscarOuCriarArquivoServidor(servidor);
+            if (conteudoExistente != null) {
+                arquivo.carregarConteudoExistente(conteudoExistente);
+                String ultimoTimestamp = extrairUltimoTimestamp(conteudoExistente, servidor.getNome());
+                arquivo.setUltimoTimestamp(ultimoTimestamp);
+                System.out.println("Último timestamp para " + servidor.getNome() + ": " + ultimoTimestamp);
+            } else {
+                System.out.println("Arquivo não encontrado (será criado): " + keyPrincipal);
+                arquivo.adicionarLinha(cabecalho, "");
+                arquivo.setUltimoTimestamp(null);
+            }
+        }
+    }
+
+    private static String extrairUltimoTimestamp(String conteudoCSV, String servidorNome) {
+        if (conteudoCSV == null || conteudoCSV.isEmpty()) {
+            return null;
+        }
+
+        String[] linhas = conteudoCSV.split("\n");
+        String ultimoTimestamp = null;
+
+        for (int i = linhas.length - 1; i >= 0; i--) {
+            String linha = linhas[i].trim();
+            if (!linha.isEmpty() && !linha.startsWith("id;")) {
+                String[] campos = linha.split(";");
+                if (campos.length >= 3 && campos[1].equals(servidorNome)) {
+                    ultimoTimestamp = campos[2];
+                    break;
+                }
+            }
+        }
+        return ultimoTimestamp;
+    }
+
+    private static boolean ehLinhaNova(String servidorNome, String timestampRaw) {
+        ServidorArquivo arquivo = buscarArquivoPorServidor(servidorNome);
+        if (arquivo == null) {
+            return true;
+        }
+
+        String ultimoTimestamp = arquivo.getUltimoTimestamp();
+        if (ultimoTimestamp == null) {
+            return true;
+        }
+
+
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            Date dataRaw = format.parse(formatarData(timestampRaw));
+            Date dataUltima = format.parse(ultimoTimestamp);
+
+            return dataRaw.after(dataUltima);
+        } catch (ParseException e) {
+            System.out.println("Erro ao comparar timestamps: " + e.getMessage());
+            return true;
         }
     }
 

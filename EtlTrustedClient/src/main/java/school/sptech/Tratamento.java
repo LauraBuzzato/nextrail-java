@@ -14,6 +14,7 @@ public class Tratamento {
 
     public static void main(String[] args) throws Exception {
         copiarEstrutura();
+        PrevisoesTrat.processarPrevisoes();
     }
 
     public static void copiarEstrutura() throws Exception {

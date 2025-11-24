@@ -11,6 +11,7 @@ public class ServidorArquivo {
     private StringBuilder conteudoProcessosCSV;
     private boolean cabecalhoProcessosEscrito = false;
     private List<Processo> processosList;
+    private String ultimoTimestamp;
 
     public ServidorArquivo(String empresaNome, String servidorNome) {
         this.empresaNome = empresaNome;
@@ -18,6 +19,7 @@ public class ServidorArquivo {
         this.conteudoCSV = new StringBuilder();
         this.conteudoProcessosCSV = new StringBuilder();
         this.processosList = new ArrayList<>();
+        this.ultimoTimestamp = null;
     }
 
     public void adicionarLinha(String cabecalho, String linha) {
@@ -26,6 +28,20 @@ public class ServidorArquivo {
             cabecalhoEscrito = true;
         }
         conteudoCSV.append(linha).append("\n");
+        if (linha != null && !linha.trim().isEmpty()) {
+            String[] campos = linha.split(";");
+            if (campos.length >= 3) {
+                this.ultimoTimestamp = campos[2];
+            }
+        }
+    }
+
+    public void setUltimoTimestamp(String ultimoTimestamp) {
+        this.ultimoTimestamp = ultimoTimestamp;
+    }
+
+    public String getUltimoTimestamp() {
+        return ultimoTimestamp;
     }
 
     public void adicionarLinhaProcessos(String cabecalho, String linha) {

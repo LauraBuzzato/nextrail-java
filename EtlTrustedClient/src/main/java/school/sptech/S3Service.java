@@ -82,4 +82,17 @@ public class S3Service {
                 RequestBody.fromString(json)
         );
     }
+
+    public void enviarJsonObject(String bucket, String key, Object objeto) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(objeto);
+
+        s3.putObject(PutObjectRequest.builder()
+                        .bucket(bucket)
+                        .key(key)
+                        .contentType("application/json")
+                        .build(),
+                RequestBody.fromString(json)
+        );
+    }
 }
