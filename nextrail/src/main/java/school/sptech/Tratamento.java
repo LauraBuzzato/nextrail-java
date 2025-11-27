@@ -39,7 +39,7 @@ public class Tratamento {
         System.out.println("Processamento do dia: " + dataAtual);
 
         S3Object arquivoMachineData = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "machine_data_", dataAtual);
-        S3Object arquivoProcessos = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "ProcessosUso_", dataAtual);
+        S3Object arquivoProcessos = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "nomeProcessosUso_", dataAtual);
 
         if (arquivoMachineData == null && arquivoProcessos == null) {
             System.out.println("Nenhum arquivo do dia " + dataAtual + " encontrado no bucket raw. Encerrando processamento.");

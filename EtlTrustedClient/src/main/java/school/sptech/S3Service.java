@@ -49,6 +49,7 @@ public class S3Service {
                 .build());
     }
 
+
     // baixar lista pro json
 
     public List<Map<String, String>> baixarJsonLista(String bucket, String key) {
@@ -67,6 +68,8 @@ public class S3Service {
             return new ArrayList<>();
         }
     }
+
+
 
     // enviar Json
 

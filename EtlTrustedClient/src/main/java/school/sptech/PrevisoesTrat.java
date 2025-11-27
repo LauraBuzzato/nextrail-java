@@ -20,15 +20,16 @@ public class PrevisoesTrat {
 
             for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
                 String empresa = empresaPrefix.prefix().replace("/", "");
+                System.out.println(empresa);
 
                 ListObjectsV2Response servidores = s3.listarComPrefixo(TRUSTED_BUCKET, empresa + "/", true);
 
                 for (CommonPrefix servidorPrefix : servidores.commonPrefixes()) {
                     String servidorCompleto = servidorPrefix.prefix();
                     String servidor = servidorCompleto.replace(empresa + "/", "").replace("/", "");
+                    System.out.println(servidor);
 
                     List<PrevisaoModel> dadosHistoricos = coletarDadosHistoricos(empresa, servidor, hoje);
-
                     if (!dadosHistoricos.isEmpty()) {
                         PrevisaoModel previsaoSemanal = gerarPrevisaoSemanal(dadosHistoricos, empresa, servidor);
                         salvarPrevisaoClient(previsaoSemanal, empresa, servidor, hoje, "semanal");
@@ -44,20 +45,37 @@ public class PrevisoesTrat {
         }
     }
 
+
+    private static void garantirPastaPrevisoes(String empresa, String servidor) throws Exception {
+        String prefix = String.format("%s/%s/previsoes/", empresa, servidor);
+
+        ListObjectsV2Response resposta = s3.listarComPrefixo(CLIENT_BUCKET, prefix, true);
+
+        boolean existe = resposta != null && !resposta.contents().isEmpty();
+
+        if (!existe) {
+            System.out.println("hehe");
+        } else {
+            System.out.println("Pasta já existe.");
+        }
+    }
+
+
     private static List<PrevisaoModel> coletarDadosHistoricos(String empresa, String servidor, LocalDate dataBase) {
         List<PrevisaoModel> dados = new ArrayList<>();
 
         try {
             for (int i = 30; i >= 1; i--) {
                 LocalDate data = dataBase.minusDays(i);
-                String arquivoKey = String.format("%s/%s/coleta_%s.csv", empresa, servidor, data.toString());
+                System.out.println(data);
+                String arquivoKey = String.format("%s/%s/coleta_%s.csv", empresa, servidor, data);
 
                 try {
                     String csvContent = s3.baixarArquivo(TRUSTED_BUCKET, arquivoKey).asUtf8String();
                     List<PrevisaoModel> linhas = PrevisaoModel.parseCsvToDados(csvContent);
                     dados.addAll(linhas);
                 } catch (Exception e) {
-                    continue;
+                    System.out.println("erro ao salvar" + e);
                 }
             }
         } catch (Exception e) {
@@ -192,10 +210,14 @@ public class PrevisoesTrat {
         String empresaFormatada = formatarNome(empresa);
         String servidorFormatado = formatarNome(servidor);
 
-        String key = String.format("%s/%s/previsoes/dadosPrev_%s_%s_semanal.json",
+
+        garantirPastaPrevisoes(empresaFormatada, servidorFormatado);
+        String key = String.format(
+                "%s/%s/previsoes/dadosPrev_%s_%s.json",
                 empresaFormatada, servidorFormatado,
                 data.format(DateTimeFormatter.ofPattern("dd-MM-yyyy")),
-                tipoPeriodo);
+                tipoPeriodo
+        );
 
         s3.enviarJsonObject(CLIENT_BUCKET, key, previsao);
     }
