@@ -31,6 +31,7 @@ public class Tratamento {
 
         String bucketRaw = "bucket-teste-python";
         String bucketTrusted = "bucket-trusted-teste-tratamento";
+        String bucketClient = "bucket-client-teste-etl";
 
         List<String> servidoresProcessados = new ArrayList<>();
         S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
@@ -61,7 +62,7 @@ public class Tratamento {
             System.out.println("Arquivo de processos não encontrado para o dia " + dataAtual);
         }
 
-        salvarArquivosTrusted(s3, bucketTrusted, arquivosPorServidor, dataAtual);
+        salvarArquivosTrusted(s3, bucketTrusted, bucketClient, arquivosPorServidor, dataAtual);
 
         System.out.println("Processamento concluído!");
         System.out.println("Servidores processados: " + servidoresProcessados);
@@ -294,13 +295,13 @@ public class Tratamento {
         return null;
     }
 
-    private static void salvarArquivosTrusted(S3Client s3, String bucketTrusted,
+    private static void salvarArquivosTrusted(S3Client s3, String bucketTrusted, String bucketClient,
                                               List<ServidorArquivo> arquivos, String data) {
         for (ServidorArquivo arquivo : arquivos) {
             salvarArquivoPrincipal(s3, bucketTrusted, arquivo, data);
 
             if (arquivo.temProcessos()) {
-                salvarArquivoProcessos(s3, bucketTrusted, arquivo, data);
+                salvarArquivoProcessosCliente(s3, bucketClient, arquivo, data);
             }
         }
     }
@@ -326,32 +327,6 @@ public class Tratamento {
 
         } catch (Exception e) {
             System.out.println("Erro ao salvar arquivo principal: " + e.getMessage());
-        }
-    }
-
-    private static void salvarArquivoProcessos(S3Client s3, String bucketTrusted, ServidorArquivo arquivo, String data) {
-        try {
-            String empresaFolder = formatarNome(arquivo.getEmpresaNome());
-            String servidorFolder = formatarNome(arquivo.getServidorNome());
-
-            String key = String.format("%s/%s/ProcessosUso_%s.csv",
-                    empresaFolder, servidorFolder, data);
-
-            String csvProcessos = arquivo.gerarCSVProcessosOrdenado();
-
-            s3.putObject(
-                    PutObjectRequest.builder()
-                            .bucket(bucketTrusted)
-                            .key(key)
-                            .contentType("text/csv")
-                            .build(),
-                    RequestBody.fromString(csvProcessos)
-            );
-
-            System.out.println("Arquivo de processos salvo: " + key);
-
-        } catch (Exception e) {
-            System.out.println("Erro ao salvar arquivo de processos: " + e.getMessage());
         }
     }
 
@@ -410,6 +385,36 @@ public class Tratamento {
         ServidorArquivo arquivo = adicionarLinhaAoArquivoServidor(servidor, cabecalho, campos);
         return arquivo;
     }
+
+
+    private static void salvarArquivoProcessosCliente(S3Client s3, String bucketClient, ServidorArquivo arquivo, String data) {
+        try {
+            String empresaFolder = formatarNome(arquivo.getEmpresaNome());
+            String servidorFolder = formatarNome(arquivo.getServidorNome());
+
+            String key = String.format("%s/%s/processos/ProcessosUso_%s.csv",
+                    empresaFolder, servidorFolder, data);
+
+            String csvProcessos = arquivo.gerarCSVProcessosOrdenado();
+            s3.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucketClient)
+                            .key(key)
+                            .contentType("text/csv")
+                            .build(),
+                    RequestBody.fromString(csvProcessos)
+            );
+
+            System.out.println("Arquivo de processos enviado para cliente: " + key);
+
+        } catch (Exception e) {
+            System.out.println("Erro ao enviar arquivo de processos para cliente: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+
 
     private static void carregarArquivosExistentes(S3Manager s3Manager, String data, String cabecalho) {
         System.out.println("Carregando arquivos existentes do bucket trusted para a data: " + data);
