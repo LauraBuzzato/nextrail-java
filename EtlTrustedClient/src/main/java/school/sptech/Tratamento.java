@@ -13,6 +13,7 @@ public class Tratamento {
     private static final S3Service s3 = new S3Service();
 
     public static void main(String[] args) throws Exception {
+        copiarEstrutura();
         PrevisoesTrat.processarPrevisoes();
     }
 

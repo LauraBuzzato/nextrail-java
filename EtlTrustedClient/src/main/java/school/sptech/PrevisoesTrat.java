@@ -111,13 +111,14 @@ public class PrevisoesTrat {
         List<Double> mediasDisco = calcularMediasSemanais(dadosHistoricos, "disco");
         List<Double> mediasLatencia = calcularMediasSemanais(dadosHistoricos, "latencia");
 
-        List<Double> previsaoCpu = calcularPrevisaoTendencia(mediasCpu);
-        List<Double> previsaoRam = calcularPrevisaoTendencia(mediasRam);
-        List<Double> previsaoDisco = calcularPrevisaoTendencia(mediasDisco);
-        List<Double> previsaoLatencia = calcularPrevisaoTendencia(mediasLatencia);
+        List<Double> previsaoCpu = calcularPrevisaoComHistorico(mediasCpu);
+        List<Double> previsaoRam = calcularPrevisaoComHistorico(mediasRam);
+        List<Double> previsaoDisco = calcularPrevisaoComHistorico(mediasDisco);
+        List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
 
         return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia, empresa, servidor, "semanal");
     }
+
 
     private static PrevisaoModel gerarPrevisaoMensal(List<PrevisaoModel> dadosHistoricos, String empresa, String servidor) {
         List<Double> mediasCpu = calcularMediasMensais(dadosHistoricos, "cpu");
@@ -125,10 +126,10 @@ public class PrevisoesTrat {
         List<Double> mediasDisco = calcularMediasMensais(dadosHistoricos, "disco");
         List<Double> mediasLatencia = calcularMediasMensais(dadosHistoricos, "latencia");
 
-        List<Double> previsaoCpu = calcularPrevisaoTendencia(mediasCpu);
-        List<Double> previsaoRam = calcularPrevisaoTendencia(mediasRam);
-        List<Double> previsaoDisco = calcularPrevisaoTendencia(mediasDisco);
-        List<Double> previsaoLatencia = calcularPrevisaoTendencia(mediasLatencia);
+        List<Double> previsaoCpu = calcularPrevisaoComHistorico(mediasCpu);
+        List<Double> previsaoRam = calcularPrevisaoComHistorico(mediasRam);
+        List<Double> previsaoDisco = calcularPrevisaoComHistorico(mediasDisco);
+        List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
 
         return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia, empresa, servidor, "mensal");
     }
@@ -216,20 +217,25 @@ public class PrevisoesTrat {
         return medias;
     }
 
-    private static List<Double> calcularPrevisaoTendencia(List<Double> historico) {
-        List<Double> previsoes = new ArrayList<>();
+    private static List<Double> calcularPrevisaoComHistorico(List<Double> historico) {
+        List<Double> resultado = new ArrayList<>();
 
         if (historico.isEmpty()) {
-            return previsoes;
+            return resultado;
         }
 
         if (historico.size() == 1) {
             double valor = historico.get(0);
-            for (int i = 0; i < 4; i++) {
-                previsoes.add(valor);
-            }
-            return previsoes;
+            resultado.add(valor);
+            resultado.add(valor);
+            resultado.add(valor);
+            resultado.add(valor);
+            return resultado;
         }
+
+        int ultimoIndex = historico.size() - 1;
+        resultado.add(historico.get(ultimoIndex - 1));
+        resultado.add(historico.get(ultimoIndex));
 
         int n = historico.size();
         double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
@@ -244,14 +250,16 @@ public class PrevisoesTrat {
         double slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
         double intercept = (sumY - slope * sumX) / n;
 
-        for (int i = n; i < n + 4; i++) {
+        for (int i = n; i < n + 2; i++) {
             double previsao = slope * i + intercept;
             previsao = Math.max(0, Math.min(100, previsao));
-            previsoes.add(Math.round(previsao * 10.0) / 10.0);
+            resultado.add(Math.round(previsao * 10.0) / 10.0);
         }
 
-        return previsoes;
+        return resultado;
     }
+
+
 
     private static void salvarPrevisaoClient(PrevisaoModel previsao, String empresa, String servidor,
                                              LocalDate data, String tipoPeriodo) throws Exception {
