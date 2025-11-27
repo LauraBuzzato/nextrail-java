@@ -192,7 +192,7 @@ public class PrevisoesTrat {
         String empresaFormatada = formatarNome(empresa);
         String servidorFormatado = formatarNome(servidor);
 
-        String key = String.format("%s/%s/previsoes/dadosPrev_%s_%s.json",
+        String key = String.format("%s/%s/previsoes/dadosPrev_%s_%s_semanal.json",
                 empresaFormatada, servidorFormatado,
                 data.format(DateTimeFormatter.ofPattern("dd-MM-yyyy")),
                 tipoPeriodo);
