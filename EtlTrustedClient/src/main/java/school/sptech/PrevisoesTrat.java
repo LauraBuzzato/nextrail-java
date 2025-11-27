@@ -20,68 +20,88 @@ public class PrevisoesTrat {
 
             for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
                 String empresa = empresaPrefix.prefix().replace("/", "");
-                System.out.println(empresa);
+                System.out.println("Processando empresa: " + empresa);
 
                 ListObjectsV2Response servidores = s3.listarComPrefixo(TRUSTED_BUCKET, empresa + "/", true);
 
                 for (CommonPrefix servidorPrefix : servidores.commonPrefixes()) {
                     String servidorCompleto = servidorPrefix.prefix();
                     String servidor = servidorCompleto.replace(empresa + "/", "").replace("/", "");
-                    System.out.println(servidor);
+                    System.out.println("Processando servidor: " + servidor);
 
-                    List<PrevisaoModel> dadosHistoricos = coletarDadosHistoricos(empresa, servidor, hoje);
-                    if (!dadosHistoricos.isEmpty()) {
-                        PrevisaoModel previsaoSemanal = gerarPrevisaoSemanal(dadosHistoricos, empresa, servidor);
+                    List<PrevisaoModel> dadosSemanais = coletarDadosHistoricos(empresa, servidor, hoje, 7);
+                    if (!dadosSemanais.isEmpty()) {
+                        System.out.println("Gerando previsão semanal com " + dadosSemanais.size() + " registros");
+                        PrevisaoModel previsaoSemanal = gerarPrevisaoSemanal(dadosSemanais, empresa, servidor);
                         salvarPrevisaoClient(previsaoSemanal, empresa, servidor, hoje, "semanal");
+                        System.out.println("Previsão semanal salva");
+                    } else {
+                        System.out.println("Sem dados para previsão semanal");
+                    }
 
-                        PrevisaoModel previsaoMensal = gerarPrevisaoMensal(dadosHistoricos, empresa, servidor);
+                    List<PrevisaoModel> dadosMensais = coletarDadosHistoricos(empresa, servidor, hoje, 30);
+                    if (!dadosMensais.isEmpty()) {
+                        System.out.println("Gerando previsão mensal com " + dadosMensais.size() + " registros");
+                        PrevisaoModel previsaoMensal = gerarPrevisaoMensal(dadosMensais, empresa, servidor);
                         salvarPrevisaoClient(previsaoMensal, empresa, servidor, hoje, "mensal");
+                        System.out.println("Previsão mensal salva");
+                    } else {
+                        System.out.println("Sem dados para previsão mensal");
                     }
                 }
             }
 
+            System.out.println("\nProcessamento de previsões concluído!");
+
         } catch (Exception e) {
             System.out.println("Erro no processamento de previsões: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-
-    private static void garantirPastaPrevisoes(String empresa, String servidor) throws Exception {
-        String prefix = String.format("%s/%s/previsoes/", empresa, servidor);
-
-        ListObjectsV2Response resposta = s3.listarComPrefixo(CLIENT_BUCKET, prefix, true);
-
-        boolean existe = resposta != null && !resposta.contents().isEmpty();
-
-        if (!existe) {
-            System.out.println("hehe");
-        } else {
-            System.out.println("Pasta já existe.");
-        }
-    }
-
-
-    private static List<PrevisaoModel> coletarDadosHistoricos(String empresa, String servidor, LocalDate dataBase) {
+    private static List<PrevisaoModel> coletarDadosHistoricos(String empresa, String servidor,
+                                                              LocalDate dataBase, int dias) {
         List<PrevisaoModel> dados = new ArrayList<>();
 
         try {
-            for (int i = 30; i >= 1; i--) {
-                LocalDate data = dataBase.minusDays(i);
-                System.out.println(data);
-                String arquivoKey = String.format("%s/%s/coleta_%s.csv", empresa, servidor, data);
+            String prefixo = String.format("%s/%s/", empresa, servidor);
+            System.out.println("Listando arquivos em: " + prefixo);
+
+            ListObjectsV2Response response = s3.listarComPrefixo(TRUSTED_BUCKET, prefixo, false);
+
+            LocalDate dataLimite = dataBase.minusDays(dias - 1);
+            System.out.println("Buscando arquivos entre " + dataLimite + " e " + dataBase);
+
+            for (S3Object objeto : response.contents()) {
+                String key = objeto.key();
+
+                if (!key.endsWith(".csv") || !key.contains("coleta_")) {
+                    continue;
+                }
 
                 try {
-                    String csvContent = s3.baixarArquivo(TRUSTED_BUCKET, arquivoKey).asUtf8String();
-                    List<PrevisaoModel> linhas = PrevisaoModel.parseCsvToDados(csvContent);
-                    dados.addAll(linhas);
+                    String dataStr = key.substring(key.lastIndexOf("coleta_") + 7, key.lastIndexOf(".csv"));
+                    LocalDate dataArquivo = LocalDate.parse(dataStr);
+
+                    if (!dataArquivo.isBefore(dataLimite) && !dataArquivo.isAfter(dataBase)) {
+                        String csvContent = s3.baixarArquivo(TRUSTED_BUCKET, key).asUtf8String();
+                        List<PrevisaoModel> linhas = PrevisaoModel.parseCsvToDados(csvContent);
+                        dados.addAll(linhas);
+                        System.out.println("Arquivo: " + key + " - Data: " + dataArquivo + " - Registros: " + linhas.size());
+                    } else {
+                        System.out.println("Arquivo fora do range: " + key + " - Data: " + dataArquivo);
+                    }
                 } catch (Exception e) {
-                    System.out.println("erro ao salvar" + e);
+                    System.out.println("Erro ao processar arquivo: " + key + " - " + e.getMessage());
                 }
             }
+
         } catch (Exception e) {
             System.out.println("Erro ao coletar dados históricos: " + e.getMessage());
+            e.printStackTrace();
         }
 
+        System.out.println("Total de registros coletados para análise: " + dados.size());
         return dados;
     }
 
@@ -116,11 +136,23 @@ public class PrevisoesTrat {
     private static List<Double> calcularMediasSemanais(List<PrevisaoModel> dados, String componente) {
         List<Double> medias = new ArrayList<>();
 
-        int semanas = Math.min(4, dados.size() / 7);
+        if (dados.isEmpty()) {
+            return medias;
+        }
 
-        for (int i = 0; i < semanas; i++) {
-            int inicio = i * 7;
-            int fim = Math.min((i + 1) * 7, dados.size());
+        int registrosPorSemana = 7;
+        int numSemanas = Math.max(1, (dados.size() + registrosPorSemana - 1) / registrosPorSemana);
+
+        numSemanas = Math.min(4, numSemanas);
+
+        for (int i = 0; i < numSemanas; i++) {
+            int inicio = i * registrosPorSemana;
+            int fim = Math.min((i + 1) * registrosPorSemana, dados.size());
+
+
+            if (inicio >= dados.size()) {
+                break;
+            }
 
             double soma = 0;
             int count = 0;
@@ -146,11 +178,22 @@ public class PrevisoesTrat {
     private static List<Double> calcularMediasMensais(List<PrevisaoModel> dados, String componente) {
         List<Double> medias = new ArrayList<>();
 
-        int meses = Math.min(3, dados.size() / 30);
+        if (dados.isEmpty()) {
+            return medias;
+        }
 
-        for (int i = 0; i < meses; i++) {
-            int inicio = i * 30;
-            int fim = Math.min((i + 1) * 30, dados.size());
+        int registrosPorMes = 30;
+        int numMeses = Math.max(1, (dados.size() + registrosPorMes - 1) / registrosPorMes);
+
+        numMeses = Math.min(3, numMeses);
+
+        for (int i = 0; i < numMeses; i++) {
+            int inicio = i * registrosPorMes;
+            int fim = Math.min((i + 1) * registrosPorMes, dados.size());
+
+            if (inicio >= dados.size()) {
+                break;
+            }
 
             double soma = 0;
             int count = 0;
@@ -176,10 +219,14 @@ public class PrevisoesTrat {
     private static List<Double> calcularPrevisaoTendencia(List<Double> historico) {
         List<Double> previsoes = new ArrayList<>();
 
-        if (historico.size() < 2) {
-            double ultimoValor = historico.isEmpty() ? 50.0 : historico.get(historico.size() - 1);
+        if (historico.isEmpty()) {
+            return previsoes;
+        }
+
+        if (historico.size() == 1) {
+            double valor = historico.get(0);
             for (int i = 0; i < 4; i++) {
-                previsoes.add(ultimoValor);
+                previsoes.add(valor);
             }
             return previsoes;
         }
@@ -206,20 +253,19 @@ public class PrevisoesTrat {
         return previsoes;
     }
 
-    private static void salvarPrevisaoClient(PrevisaoModel previsao, String empresa, String servidor, LocalDate data, String tipoPeriodo) throws Exception {
+    private static void salvarPrevisaoClient(PrevisaoModel previsao, String empresa, String servidor,
+                                             LocalDate data, String tipoPeriodo) throws Exception {
         String empresaFormatada = formatarNome(empresa);
         String servidorFormatado = formatarNome(servidor);
 
-
-        garantirPastaPrevisoes(empresaFormatada, servidorFormatado);
-        String key = String.format(
-                "%s/%s/previsoes/dadosPrev_%s_%s.json",
-                empresaFormatada, servidorFormatado,
+        String key = String.format("%s/%s/previsoes/dadosPrev_%s_%s.json",
+                empresaFormatada,
+                servidorFormatado,
                 data.format(DateTimeFormatter.ofPattern("dd-MM-yyyy")),
-                tipoPeriodo
-        );
-
+                tipoPeriodo);
         s3.enviarJsonObject(CLIENT_BUCKET, key, previsao);
+
+        System.out.println("      Salvo em: " + key);
     }
 
     private static String formatarNome(String nome) {
