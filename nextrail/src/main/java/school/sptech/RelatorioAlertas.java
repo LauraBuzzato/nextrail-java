@@ -14,79 +14,26 @@ public class RelatorioAlertas {
         this.notificador = notificador;
     }
 
-    public void gerarRelatorioAposProcessamento(List<String> servidoresProcessados) {
+    public String gerarRelatorioAposProcessamento(List<String> servidoresProcessados) {
         System.out.println("GERANDO RELATÓRIO APÓS PROCESSAMENTO DO CSV");
-        gerarEEnviarRelatorioFiltrado(servidoresProcessados);
-        System.out.println("Relatório pós-processamento enviado para Slack/Jira!");
+        return gerarEEnviarRelatorioFiltrado(servidoresProcessados);
     }
 
-    private void gerarEEnviarRelatorio() {
-        System.out.println("Gerando relatório");
+    private String gerarEEnviarRelatorioFiltrado(List<String> servidoresProcessados) {
+        StringBuilder relatorioConsolidado = new StringBuilder();
 
-        String sqlServidores = """
-                SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
-                FROM alerta a
-                JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
-                JOIN empresa e ON s.fk_empresa = e.id
-                WHERE a.inicio >= NOW() - INTERVAL 1 HOUR
-                """;
-
-        List<Map<String, Object>> servidores = con.queryForList(sqlServidores);
-
-        if (servidores.isEmpty()) {
-            System.out.println("Nenhum alerta registrado no período.");
-            notificador.enviarRelatorioConsolidado(
-                    "Relatório de Alertas - Sem Alertas",
-                    "RELATÓRIO DE ALERTAS\nNenhum alerta registrado na última hora."
-            );
-            return;
-        }
-
-        for (Map<String, Object> servidor : servidores) {
-            Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
-            String servidorNome = (String) servidor.get("servidorNome");
-            String empresaNome = (String) servidor.get("empresaNome");
-
-            Map<String, Integer> contadorGravidade = contarAlertasPorGravidade(servidorId);
-            Set<String> componentesAlto = buscarComponentesComAlertaAlto(servidorId);
-
-            StringBuilder mensagem = new StringBuilder();
-            mensagem.append("*RELATÓRIO DE ALERTAS - ÚLTIMA HORA*\n");
-            mensagem.append("Empresa: ").append(empresaNome).append("\n");
-            mensagem.append("Servidor: ").append(servidorNome).append("\n");
-            mensagem.append("----------------------------------------\n");
-            mensagem.append("RESUMO DE ALERTAS:\n");
-            mensagem.append("• Baixo: ").append(contadorGravidade.get("Baixo")).append("\n");
-            mensagem.append("• Médio: ").append(contadorGravidade.get("Médio")).append("\n");
-            mensagem.append("• Alto: ").append(contadorGravidade.get("Alto")).append("\n");
-
-            if (!componentesAlto.isEmpty()) {
-                mensagem.append("COMPONENTES COM ALERTA ALTO: ").append(String.join(", ", componentesAlto)).append("\n");
-            }
-
-            mensagem.append("----------------------------------------\n");
-            mensagem.append("Período: Última hora\n");
-
-            System.out.println("RELATÓRIO:");
-            System.out.println(mensagem);
-
-            notificador.enviarRelatorioConsolidado(
-                    "Relatório de Alertas - " + servidorNome,
-                    mensagem.toString()
-            );
-        }
-    }
-
-    private void gerarEEnviarRelatorioFiltrado(List<String> servidoresProcessados) {
         System.out.println("Gerando relatório filtrado para servidores processados: " + servidoresProcessados);
+        relatorioConsolidado.append("=== RELATÓRIO DE PROCESSAMENTO ===\n");
 
         if (servidoresProcessados.isEmpty()) {
             System.out.println("Nenhum servidor processado para gerar relatório.");
+            relatorioConsolidado.append("Nenhum servidor processado no CSV.\n");
+
             notificador.enviarRelatorioConsolidado(
                     "Relatório - Processamento CSV",
                     "Nenhum servidor processado no CSV."
             );
-            return;
+            return relatorioConsolidado.toString();
         }
 
         String placeholders = String.join(",", Collections.nCopies(servidoresProcessados.size(), "?"));
@@ -102,8 +49,6 @@ public class RelatorioAlertas {
 
         List<Map<String, Object>> servidores = con.queryForList(sqlServidores, servidoresProcessados.toArray());
 
-        StringBuilder relatorioConsolidado = new StringBuilder();
-        relatorioConsolidado.append("*RELATÓRIO - PROCESSAMENTO CSV*\n");
         relatorioConsolidado.append("Servidores lidos do CSV: ").append(String.join(", ", servidoresProcessados)).append("\n");
         relatorioConsolidado.append("Total de servidores processados: ").append(servidoresProcessados.size()).append("\n");
         relatorioConsolidado.append("------------------------------------------\n");
@@ -111,9 +56,9 @@ public class RelatorioAlertas {
         if (servidores.isEmpty()) {
             relatorioConsolidado.append("Nenhum alerta gerado durante o processamento para os servidores listados.\n");
             relatorioConsolidado.append("Possíveis causas:\n");
-            relatorioConsolidado.append("Os servidores não existem no banco de dados\n");
-            relatorioConsolidado.append("Não houve alertas na última hora\n");
-            relatorioConsolidado.append("Os nomes no CSV não correspondem aos nomes no banco\n");
+            relatorioConsolidado.append("- Os servidores não existem no banco de dados\n");
+            relatorioConsolidado.append("- Não houve alertas na última hora\n");
+            relatorioConsolidado.append("- Os nomes no CSV não correspondem aos nomes no banco\n");
         } else {
             relatorioConsolidado.append("Servidores com alertas na última hora: ").append(servidores.size()).append("\n");
             relatorioConsolidado.append("----------------------------------------\n");
@@ -140,7 +85,7 @@ public class RelatorioAlertas {
                 relatorioConsolidado.append("----------------------------------------\n");
             }
 
-            // Adicionar resumo geral
+
             int totalAlertas = servidores.stream()
                     .mapToInt(servidor -> {
                         Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
@@ -164,6 +109,8 @@ public class RelatorioAlertas {
                 "Relatório - Processamento CSV - " + servidoresProcessados.size() + " servidores",
                 relatorioConsolidado.toString()
         );
+
+        return relatorioConsolidado.toString();
     }
 
     private Map<String, Integer> contarAlertasPorGravidade(Integer servidorId) {
