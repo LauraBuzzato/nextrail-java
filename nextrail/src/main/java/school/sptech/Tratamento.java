@@ -71,9 +71,9 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
             String bucketTrusted = System.getenv("BUCKET_TRUSTED");
             String bucketClient = System.getenv("BUCKET_CLIENT");
 
-            if (bucketRaw == null) bucketRaw = "bucket-teste-python";
-            if (bucketTrusted == null) bucketTrusted = "bucket-trusted-teste-tratamento";
-            if (bucketClient == null) bucketClient = "bucket-client-teste-etl";
+            if (bucketRaw == null) bucketRaw = "raw-nextrail-teste";
+            if (bucketTrusted == null) bucketTrusted = "trusted-nextrail-teste";
+            if (bucketClient == null) bucketClient = "client-nextrail-teste";
 
             System.out.println("Buckets configurados:");
             System.out.println("Raw: " + bucketRaw);
