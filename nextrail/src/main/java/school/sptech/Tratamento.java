@@ -20,13 +20,13 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
-public class Tratamento implements RequestHandler<Map<String, String>, String> {
+public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
     private static final List<ServidorConfig> servidoresConfig = new ArrayList<>();
     private static final List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
 
     @Override
-    public String handleRequest(Map<String, String> event, Context context) {
+    public String handleRequest(Map<String, Object> event, Context context) {
         LambdaLogger logger = context.getLogger();
         logger.log("Iniciando processamento ETL via Lambda");
 
@@ -204,6 +204,7 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
         int linhasNovas = 0;
         int alertasGerados = 0;
 
+        System.out.println("START ");
         try (InputStream rawStream = s3.getObject(
                 GetObjectRequest.builder()
                         .bucket(bucketRaw)
@@ -226,6 +227,10 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
             String linha;
             while ((linha = leitor.readLine()) != null) {
                 linhasTotais++;
+                if (linhasTotais % 100 == 0) {
+                    System.out.println("Linhas lidas: " + linhasTotais);
+                }
+
                 linha = limparLinha(linha);
 
                 if (linha.trim().isEmpty()) continue;
@@ -234,6 +239,9 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
                 if (campos.length >= 11) {
                     String servidorNomeCSV = campos[1].trim();
                     String timestampRaw = campos[2].trim();
+
+                    System.out.println("Processando servidor: " + servidorNomeCSV + " | Timestamp: " + timestampRaw);
+
                     if (ehLinhaNova(servidorNomeCSV, timestampRaw)) {
                         linhasParaProcessar.add(campos);
                         linhasNovas++;
@@ -241,16 +249,29 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
                         ServidorConfig servidor = buscarOuCriarServidor(con, servidorNomeCSV);
                         if (servidor != null && !servidoresProcessados.contains(servidor.getNome())) {
                             servidoresProcessados.add(servidor.getNome());
+                            System.out.println("Servidor adicionado para processamento: " + servidor.getNome());
+                        } else if (servidor == null) {
+                            System.out.println("AVISO: Servidor não encontrado no banco: " + servidorNomeCSV);
                         }
+                    } else {
+                        System.out.println("Linha duplicada ignorada - Servidor: " + servidorNomeCSV + " | Timestamp: " + timestampRaw);
                     }
+                } else {
+                    System.out.println("Linha ignorada - campos insuficientes: " + linha);
                 }
             }
 
-            for (String[] campos : linhasParaProcessar) {
+            System.out.println("Total de linhas para processar: " + linhasParaProcessar.size());
+
+            for (int i = 0; i < linhasParaProcessar.size(); i++) {
+                String[] campos = linhasParaProcessar.get(i);
                 String servidorNomeCSV = campos[1].trim();
                 ServidorConfig servidor = buscarOuCriarServidor(con, servidorNomeCSV);
 
                 if (servidor != null) {
+                    System.out.println("Processando linha " + (i + 1) + "/" + linhasParaProcessar.size() +
+                            " - Servidor: " + servidor.getNome());
+
                     ComponenteLimites limites = buscarLimitesServidor(con, servidor.getId());
                     ServidorArquivo arquivoAtual = processarLinhaMachineData(campos, servidor, limites, alertaInsert, cabecalho);
 
@@ -259,19 +280,28 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
                         if (alertaGerado) alertasGerados++;
                     }
                     linhasProcessadas++;
+                } else {
+                    System.out.println("ERRO: Servidor não encontrado para linha - " + servidorNomeCSV);
                 }
             }
 
-            String resumo = String.format("Machine_data processado! Linhas lidas: %d | Linhas novas: %d | Linhas processadas: %d | Alertas gerados: %d",
-                    linhasTotais, linhasNovas, linhasProcessadas, alertasGerados);
+            String resumo = String.format("Machine_data processado! Linhas lidas: %d | Linhas novas: %d | Linhas processadas: %d | Alertas gerados: %d | Servidores processados: %d",
+                    linhasTotais, linhasNovas, linhasProcessadas, alertasGerados, servidoresProcessados.size());
             System.out.println(resumo);
             resultado.append(resumo).append("\n");
+
+            if (!servidoresProcessados.isEmpty()) {
+                resultado.append("Servidores processados: ").append(String.join(", ", servidoresProcessados)).append("\n");
+            } else {
+                resultado.append("NENHUM servidor foi processado - verifique os nomes no CSV vs Banco de Dados\n");
+            }
 
         } catch (Exception e) {
             String erro = "Erro ao processar machine_data: " + e.getMessage();
             System.out.println(erro);
             e.printStackTrace();
             resultado.append(erro).append("\n");
+            resultado.append("Stack trace: ").append(Arrays.toString(e.getStackTrace())).append("\n");
         }
 
         return resultado.toString();
@@ -574,15 +604,18 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
 
     private static ServidorConfig buscarServidorNoBanco(JdbcTemplate con, String servidorNome) {
         try {
+            System.out.println("Buscando servidor no banco: '" + servidorNome + "'");
+
             String sql = """
-                    SELECT DISTINCT s.id as id, s.nome as nome, e.razao_social as empresa_nome,
-                           e.id as empresa_id, ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
-                    FROM servidor s
-                    JOIN empresa e ON s.fk_empresa = e.id
-                    JOIN leitura_script ls ON ls.fk_servidor = s.id
-                    WHERE s.nome = ?
-                    LIMIT 1
-                    """;
+                SELECT s.id, s.nome, e.razao_social as empresa_nome, 
+                       e.id as empresa_id, 
+                       COALESCE(ls.leituras_consecutivas_para_alerta, 3) as leituras_consecutivas_para_alerta
+                FROM servidor s
+                JOIN empresa e ON s.fk_empresa = e.id
+                LEFT JOIN leitura_script ls ON ls.fk_servidor = s.id
+                WHERE s.nome = ?
+                LIMIT 1
+                """;
 
             List<ServidorConfig> resultados = con.query(sql, (rs, rowNum) ->
                     new ServidorConfig(
@@ -593,11 +626,34 @@ public class Tratamento implements RequestHandler<Map<String, String>, String> {
                             rs.getInt("leituras_consecutivas_para_alerta")
                     ), servidorNome);
 
-            return resultados.isEmpty() ? null : resultados.get(0);
+            if (!resultados.isEmpty()) {
+                System.out.println("Servidor encontrado: " + resultados.get(0).getNome());
+                return resultados.get(0);
+            } else {
+                System.out.println("Servidor NÃO encontrado: " + servidorNome);
+                listarTodosServidores(con);
+                return null;
+            }
 
         } catch (Exception e) {
             System.out.println("Erro ao buscar servidor '" + servidorNome + "': " + e.getMessage());
+            e.printStackTrace();
             return null;
+        }
+    }
+
+    private static void listarTodosServidores(JdbcTemplate con) {
+        try {
+            String sql = "SELECT id, nome, fk_empresa FROM servidor";
+            var servidores = con.queryForList(sql);
+
+            System.out.println("SERVIDORES DISPONÍVEIS NO BANCO:");
+            for (var serv : servidores) {
+                System.out.printf("ID: %s | Nome: '%s' | Empresa: %s%n",
+                        serv.get("id"), serv.get("nome"), serv.get("fk_empresa"));
+            }
+        } catch (Exception e) {
+            System.out.println("Erro ao listar servidores: " + e.getMessage());
         }
     }
 
