@@ -14,6 +14,7 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -23,60 +24,164 @@ public class Tratamento {
     private static List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
 
     public static void main(String[] args) {
-        BancoData banco = new BancoData();
-        JdbcTemplate con = banco.con;
-        AlertaInsert alertaInsert = new AlertaInsert(con);
-        Notificador notificador = new Notificador();
-        S3Client s3 = S3Client.create();
-
-        String bucketRaw = "bucket-teste-python";
-        String bucketTrusted = "bucket-trusted-teste-tratamento";
-
-        List<String> servidoresProcessados = new ArrayList<>();
-        S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
-
-        String dataAtual = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        System.out.println("Processamento do dia: " + dataAtual);
-
-        S3Object arquivoMachineData = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "machine_data_", dataAtual);
-        S3Object arquivoProcessos = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "ProcessosUso_", dataAtual);
-
-        if (arquivoMachineData == null && arquivoProcessos == null) {
-            System.out.println("Nenhum arquivo do dia " + dataAtual + " encontrado no bucket raw. Encerrando processamento.");
-            return;
-        }
-
-        if (arquivoMachineData != null) {
-            System.out.println("Processando arquivo machine_data: " + arquivoMachineData.key());
-            processarMachineData(s3, bucketRaw, arquivoMachineData.key(), con, alertaInsert,
-                    servidoresProcessados, dataAtual, s3Manager);
-        } else {
-            System.out.println("Arquivo machine_data não encontrado para o dia " + dataAtual);
-        }
-
-        if (arquivoProcessos != null) {
-            System.out.println("Processando arquivo de processos: " + arquivoProcessos.key());
-            processarArquivoProcessos(s3, bucketRaw, arquivoProcessos.key(), dataAtual, s3Manager);
-        } else {
-            System.out.println("Arquivo de processos não encontrado para o dia " + dataAtual);
-        }
-
-        salvarArquivosTrusted(s3, bucketTrusted, arquivosPorServidor, dataAtual);
-
-        System.out.println("Processamento concluído!");
-        System.out.println("Servidores processados: " + servidoresProcessados);
-
-        System.out.println("RELATORIO APOS PROCESSAMENTO...");
-        RelatorioAlertas relatorio = new RelatorioAlertas(con, notificador);
-        relatorio.gerarRelatorioAposProcessamento(servidoresProcessados);
-
-        s3.close();
+        processar();
     }
 
-    private static void processarMachineData(S3Client s3, String bucketRaw, String keyRaw,
-                                             JdbcTemplate con, AlertaInsert alertaInsert,
-                                             List<String> servidoresProcessados, String dataAtual,
-                                             S3Manager s3Manager) {
+    public static String processar() {
+        return processarComData(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+    }
+
+    public static String processarComData(String dataEspecifica) {
+        StringBuilder resultado = new StringBuilder();
+
+        servidoresConfig.clear();
+        arquivosPorServidor.clear();
+
+        try {
+            System.out.println("INICIANDO PROCESSAMENTO ETL");
+            resultado.append("INICIANDO PROCESSAMENTO ETL\n");
+
+            BancoData banco = new BancoData();
+            JdbcTemplate con = banco.con;
+            AlertaInsert alertaInsert = new AlertaInsert(con);
+            Notificador notificador = new Notificador();
+
+            S3Client s3 = S3Client.builder()
+                    .region(software.amazon.awssdk.regions.Region.US_EAST_1)
+                    .build();
+
+            String bucketRaw = System.getenv("BUCKET_RAW");
+            String bucketTrusted = System.getenv("BUCKET_TRUSTED");
+            String bucketClient = System.getenv("BUCKET_CLIENT");
+
+            if (bucketRaw == null) bucketRaw = "bucket-teste-python";
+            if (bucketTrusted == null) bucketTrusted = "bucket-trusted-teste-tratamento";
+            if (bucketClient == null) bucketClient = "bucket-client-teste-etl";
+
+            System.out.println("Buckets configurados:");
+            System.out.println("Raw: " + bucketRaw);
+            System.out.println("Trusted: " + bucketTrusted);
+            System.out.println("Client: " + bucketClient);
+
+            resultado.append("Buckets configurados:\n")
+                    .append("Raw: ").append(bucketRaw).append("\n")
+                    .append("Trusted: ").append(bucketTrusted).append("\n")
+                    .append("Client: ").append(bucketClient).append("\n");
+
+            List<String> servidoresProcessados = new ArrayList<>();
+            S3Manager s3Manager = new S3Manager(s3, bucketTrusted);
+
+            String dataAtual = dataEspecifica != null ? dataEspecifica :
+                    LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            System.out.println("Processamento do dia: " + dataAtual);
+            resultado.append("Processamento do dia: ").append(dataAtual).append("\n");
+
+            S3Object arquivoMachineData = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "machine_data_", dataAtual);
+            S3Object arquivoProcessos = s3Manager.encontrarArquivoDoDiaAtual(bucketRaw, "nomeProcessosUso_", dataAtual);
+
+            if (arquivoMachineData == null && arquivoProcessos == null) {
+                String mensagem = "Nenhum arquivo do dia " + dataAtual + " encontrado no bucket raw. Encerrando processamento.";
+                System.out.println(mensagem);
+                resultado.append(mensagem).append("\n");
+                s3.close();
+                return resultado.toString();
+            }
+
+            if (arquivoMachineData != null) {
+                System.out.println("Processando arquivo machine_data: " + arquivoMachineData.key());
+                resultado.append("Processando arquivo machine_data: ").append(arquivoMachineData.key()).append("\n");
+
+                try {
+                    String resultadoMachineData = processarMachineData(s3, bucketRaw, arquivoMachineData.key(), con, alertaInsert,
+                            servidoresProcessados, dataAtual, s3Manager);
+                    resultado.append(resultadoMachineData).append("\n");
+                } catch (Exception e) {
+                    String erro = "Erro ao processar machine_data: " + e.getMessage();
+                    System.err.println(erro);
+                    resultado.append(erro).append("\n");
+                }
+            } else {
+                String mensagem = "Arquivo machine_data não encontrado para o dia " + dataAtual;
+                System.out.println(mensagem);
+                resultado.append(mensagem).append("\n");
+            }
+
+            if (arquivoProcessos != null) {
+                System.out.println("Processando arquivo de processos: " + arquivoProcessos.key());
+                resultado.append("Processando arquivo de processos: ").append(arquivoProcessos.key()).append("\n");
+
+                try {
+                    String resultadoProcessos = processarArquivoProcessos(s3, bucketRaw, arquivoProcessos.key(), dataAtual, s3Manager);
+                    resultado.append(resultadoProcessos).append("\n");
+                } catch (Exception e) {
+                    String erro = "Erro ao processar arquivo de processos: " + e.getMessage();
+                    System.err.println(erro);
+                    resultado.append(erro).append("\n");
+                }
+            } else {
+                String mensagem = "Arquivo de processos não encontrado para o dia " + dataAtual;
+                System.out.println(mensagem);
+                resultado.append(mensagem).append("\n");
+            }
+
+            if (!arquivosPorServidor.isEmpty()) {
+                try {
+                    salvarArquivosTrusted(s3, bucketTrusted, bucketClient, arquivosPorServidor, dataAtual);
+                    resultado.append("Arquivos salvos no bucket trusted com sucesso\n");
+                } catch (Exception e) {
+                    String erro = "Erro ao salvar arquivos trusted: " + e.getMessage();
+                    System.err.println(erro);
+                    resultado.append(erro).append("\n");
+                }
+            } else {
+                resultado.append("Nenhum arquivo para salvar no bucket trusted\n");
+            }
+
+            System.out.println("Processamento concluído!");
+            resultado.append("Processamento concluído!\n");
+            System.out.println("Servidores processados: " + servidoresProcessados);
+            resultado.append("Servidores processados: ").append(servidoresProcessados.toString()).append("\n");
+
+            if (!servidoresProcessados.isEmpty()) {
+                System.out.println("RELATORIO APOS PROCESSAMENTO...");
+                resultado.append("RELATORIO APOS PROCESSAMENTO...\n");
+
+                try {
+                    RelatorioAlertas relatorio = new RelatorioAlertas(con, notificador);
+                    String resultadoRelatorio = relatorio.gerarRelatorioAposProcessamento(servidoresProcessados);
+                    resultado.append(resultadoRelatorio).append("\n");
+                } catch (Exception e) {
+                    String erroRelatorio = "Erro ao gerar relatório: " + e.getMessage();
+                    System.err.println(erroRelatorio);
+                    resultado.append(erroRelatorio).append("\n");
+                }
+            } else {
+                resultado.append("Nenhum servidor processado, relatório não gerado\n");
+            }
+
+            s3.close();
+            resultado.append("CONCLUÍDO\n");
+
+        } catch (Exception e) {
+            String erro = "Erro durante o processamento ETL: " + e.getMessage();
+            System.err.println(erro);
+            e.printStackTrace();
+            resultado.append("ERRO: ").append(erro).append("\n");
+
+            resultado.append("Stack trace: ").append(Arrays.toString(e.getStackTrace())).append("\n");
+        } finally {
+            servidoresConfig.clear();
+            arquivosPorServidor.clear();
+        }
+
+        return resultado.toString();
+    }
+
+    private static String processarMachineData(S3Client s3, String bucketRaw, String keyRaw,
+                                               JdbcTemplate con, AlertaInsert alertaInsert,
+                                               List<String> servidoresProcessados, String dataAtual,
+                                               S3Manager s3Manager) {
+        StringBuilder resultado = new StringBuilder();
         int linhasTotais = 0;
         int linhasProcessadas = 0;
         int linhasNovas = 0;
@@ -91,11 +196,13 @@ public class Tratamento {
 
             String cabecalho = leitor.readLine();
             if (cabecalho == null) {
-                System.out.println("Arquivo machine_data vazio!");
-                return;
+                resultado.append("Arquivo machine_data vazio!\n");
+                return resultado.toString();
             }
 
             System.out.println("Cabecalho machine_data: " + cabecalho);
+            resultado.append("Cabecalho machine_data carregado\n");
+
             carregarUltimosTimestamps(s3Manager, dataAtual, cabecalho);
 
             List<String[]> linhasParaProcessar = new ArrayList<>();
@@ -138,13 +245,19 @@ public class Tratamento {
                 }
             }
 
-            System.out.printf("Machine_data processado! Linhas lidas: %d | Linhas novas: %d | Linhas processadas: %d | Alertas gerados: %d%n",
+            String resumo = String.format("Machine_data processado! Linhas lidas: %d | Linhas novas: %d | Linhas processadas: %d | Alertas gerados: %d",
                     linhasTotais, linhasNovas, linhasProcessadas, alertasGerados);
+            System.out.println(resumo);
+            resultado.append(resumo).append("\n");
 
         } catch (Exception e) {
-            System.out.println("Erro ao processar machine_data: " + e.getMessage());
+            String erro = "Erro ao processar machine_data: " + e.getMessage();
+            System.out.println(erro);
             e.printStackTrace();
+            resultado.append(erro).append("\n");
         }
+
+        return resultado.toString();
     }
 
     private static void carregarUltimosTimestamps(S3Manager s3Manager, String data, String cabecalho) {
@@ -210,7 +323,6 @@ public class Tratamento {
             return true;
         }
 
-
         try {
             SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             Date dataRaw = format.parse(formatarData(timestampRaw));
@@ -223,8 +335,9 @@ public class Tratamento {
         }
     }
 
-    private static void processarArquivoProcessos(S3Client s3, String bucketRaw, String keyRaw,
-                                                  String dataAtual, S3Manager s3Manager) {
+    private static String processarArquivoProcessos(S3Client s3, String bucketRaw, String keyRaw,
+                                                    String dataAtual, S3Manager s3Manager) {
+        StringBuilder resultado = new StringBuilder();
         int linhasProcessos = 0;
 
         try (InputStream rawStream = s3.getObject(
@@ -236,11 +349,12 @@ public class Tratamento {
 
             String cabecalho = leitor.readLine();
             if (cabecalho == null) {
-                System.out.println("Arquivo de processos vazio!");
-                return;
+                resultado.append("Arquivo de processos vazio!\n");
+                return resultado.toString();
             }
 
             System.out.println("Cabecalho processos: " + cabecalho);
+            resultado.append("Cabecalho processos carregado\n");
 
             String linha;
             while ((linha = leitor.readLine()) != null) {
@@ -255,12 +369,18 @@ public class Tratamento {
                 }
             }
 
-            System.out.println("Arquivo de processos processado! Linhas lidas: " + linhasProcessos);
+            String resumo = "Arquivo de processos processado! Linhas lidas: " + linhasProcessos;
+            System.out.println(resumo);
+            resultado.append(resumo).append("\n");
 
         } catch (Exception e) {
-            System.out.println("Erro ao processar arquivo de processos: " + e.getMessage());
+            String erro = "Erro ao processar arquivo de processos: " + e.getMessage();
+            System.out.println(erro);
             e.printStackTrace();
+            resultado.append(erro).append("\n");
         }
+
+        return resultado.toString();
     }
 
     private static void processarLinhaProcessos(String[] campos) {
@@ -294,13 +414,13 @@ public class Tratamento {
         return null;
     }
 
-    private static void salvarArquivosTrusted(S3Client s3, String bucketTrusted,
+    private static void salvarArquivosTrusted(S3Client s3, String bucketTrusted, String bucketClient,
                                               List<ServidorArquivo> arquivos, String data) {
         for (ServidorArquivo arquivo : arquivos) {
             salvarArquivoPrincipal(s3, bucketTrusted, arquivo, data);
 
             if (arquivo.temProcessos()) {
-                salvarArquivoProcessos(s3, bucketTrusted, arquivo, data);
+                salvarArquivoProcessosCliente(s3, bucketClient, arquivo, data);
             }
         }
     }
@@ -326,32 +446,6 @@ public class Tratamento {
 
         } catch (Exception e) {
             System.out.println("Erro ao salvar arquivo principal: " + e.getMessage());
-        }
-    }
-
-    private static void salvarArquivoProcessos(S3Client s3, String bucketTrusted, ServidorArquivo arquivo, String data) {
-        try {
-            String empresaFolder = formatarNome(arquivo.getEmpresaNome());
-            String servidorFolder = formatarNome(arquivo.getServidorNome());
-
-            String key = String.format("%s/%s/ProcessosUso_%s.csv",
-                    empresaFolder, servidorFolder, data);
-
-            String csvProcessos = arquivo.gerarCSVProcessosOrdenado();
-
-            s3.putObject(
-                    PutObjectRequest.builder()
-                            .bucket(bucketTrusted)
-                            .key(key)
-                            .contentType("text/csv")
-                            .build(),
-                    RequestBody.fromString(csvProcessos)
-            );
-
-            System.out.println("Arquivo de processos salvo: " + key);
-
-        } catch (Exception e) {
-            System.out.println("Erro ao salvar arquivo de processos: " + e.getMessage());
         }
     }
 
@@ -411,43 +505,29 @@ public class Tratamento {
         return arquivo;
     }
 
-    private static void carregarArquivosExistentes(S3Manager s3Manager, String data, String cabecalho) {
-        System.out.println("Carregando arquivos existentes do bucket trusted para a data: " + data);
+    private static void salvarArquivoProcessosCliente(S3Client s3, String bucketClient, ServidorArquivo arquivo, String data) {
+        try {
+            String empresaFolder = formatarNome(arquivo.getEmpresaNome());
+            String servidorFolder = formatarNome(arquivo.getServidorNome());
 
-        if (servidoresConfig.isEmpty()) {
-            System.out.println("Nenhum servidor identificado para carregar arquivos existentes.");
-            return;
-        }
-
-        for (ServidorConfig servidor : servidoresConfig) {
-            String empresaFolder = formatarNome(servidor.getEmpresaNome());
-            String servidorFolder = formatarNome(servidor.getNome());
-
-            String keyPrincipal = String.format("%s/%s/coleta_%s.csv",
+            String key = String.format("%s/%s/processos/ProcessosUso_%s.csv",
                     empresaFolder, servidorFolder, data);
 
-            String conteudoExistente = s3Manager.lerCSVExistente(keyPrincipal);
+            String csvProcessos = arquivo.gerarCSVProcessosOrdenado();
+            s3.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucketClient)
+                            .key(key)
+                            .contentType("text/csv")
+                            .build(),
+                    RequestBody.fromString(csvProcessos)
+            );
 
-            ServidorArquivo arquivo = buscarOuCriarArquivoServidor(servidor);
-            if (conteudoExistente != null) {
-                arquivo.carregarConteudoExistente(conteudoExistente);
-                System.out.println("Carregado arquivo existente: " + keyPrincipal);
-            } else {
-                System.out.println("Arquivo não encontrado (será criado): " + keyPrincipal);
-                arquivo.adicionarLinha(cabecalho, "");
-            }
+            System.out.println("Arquivo de processos enviado para cliente: " + key);
 
-            String keyProcessos = String.format("%s/%s/ProcessosUso_%s.csv",
-                    empresaFolder, servidorFolder, data);
-
-            String conteudoProcessosExistente = s3Manager.lerCSVExistente(keyProcessos);
-            if (conteudoProcessosExistente != null) {
-                arquivo.carregarProcessosExistente(conteudoProcessosExistente);
-                System.out.println("Carregado arquivo de processos existente: " + keyProcessos);
-            } else {
-                System.out.println("Arquivo de processos não encontrado (será criado): " + keyProcessos);
-                arquivo.adicionarLinhaProcessos("id;servidor;timestamp;NOME;USO_MEMORIA (MB)", "");
-            }
+        } catch (Exception e) {
+            System.out.println("Erro ao enviar arquivo de processos para cliente: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

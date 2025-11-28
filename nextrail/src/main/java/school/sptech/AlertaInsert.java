@@ -38,21 +38,6 @@ public class AlertaInsert {
         }
     }
 
-    public Integer buscarIdServidor(String nomeServidor) {
-        try {
-            String sql = "SELECT id FROM servidor WHERE nome = ?";
-            System.out.println("Buscando servidor: '" + nomeServidor + "'");
-
-            Integer id = con.queryForObject(sql, Integer.class, nomeServidor);
-            System.out.println("Servidor encontrado: '" + nomeServidor + "' -> ID: " + id);
-            return id;
-        } catch (Exception e) {
-            System.out.println("Servidor NÃO encontrado: '" + nomeServidor + "' - Erro: " + e.getMessage());
-            listarTodosServidores();
-            return null;
-        }
-    }
-
     private void listarTodosTiposComponentes() {
         try {
             String sql = "SELECT id, nome_tipo_componente FROM tipo_componente";
@@ -69,19 +54,4 @@ public class AlertaInsert {
         }
     }
 
-    private void listarTodosServidores() {
-        try {
-            String sql = "SELECT id, nome, fk_empresa FROM servidor";
-            var servidores = con.queryForList(sql);
-
-            System.out.println("TODOS OS SERVIDORES NO BANCO");
-            for (var serv : servidores) {
-                System.out.printf("ID: %s | Nome: '%s' | Empresa: %s%n",
-                        serv.get("id"), serv.get("nome"), serv.get("fk_empresa"));
-            }
-            System.out.println("------------------------------------");
-        } catch (Exception e) {
-            System.out.println("Erro ao listar servidores: " + e.getMessage());
-        }
-    }
 }

@@ -75,11 +75,16 @@ public class PrevisaoModel {
         }
 
         try {
+            if (campos[0].equals("id") || campos[2].equals("timestamp")) {
+                return null;
+            }
+
             LocalDateTime timestamp = parseTimestamp(campos[2]);
-            double cpuPercent = Double.parseDouble(campos[4]);
-            double memoryPercent = Double.parseDouble(campos[5]);
-            double diskPercent = Double.parseDouble(campos[8]);
-            double latenciaMediaMs = Double.parseDouble(campos[10]);
+
+            double cpuPercent = parseDoubleComVirgula(campos[4]);
+            double memoryPercent = parseDoubleComVirgula(campos[5]);
+            double diskPercent = parseDoubleComVirgula(campos[8]);
+            double latenciaMediaMs = parseDoubleComVirgula(campos[10]);
 
             List<Double> cpuList = new ArrayList<>();
             cpuList.add(cpuPercent);
@@ -97,6 +102,17 @@ public class PrevisaoModel {
         }
     }
 
+    private static double parseDoubleComVirgula(String valor) {
+        if (valor == null || valor.trim().isEmpty()) {
+            return 0.0;
+        }
+        try {
+            String valorFormatado = valor.trim().replace(",", ".");
+            return Double.parseDouble(valorFormatado);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
+    }
     private static LocalDateTime parseTimestamp(String timestampStr) {
         try {
             if (timestampStr.contains(".")) {

@@ -29,37 +29,6 @@ public class S3Manager {
         this.bucketTrusted = bucketTrusted;
     }
 
-    public String salvarCSVTrusted(String empresaNome, String servidorNome, String csvContent, String data) {
-        try {
-            String empresaFolder = formatarNome(empresaNome);
-            String servidorFolder = formatarNome(servidorNome);
-
-            String key = String.format("%s/%s/coleta_%s.csv",
-                    empresaFolder, servidorFolder, data);
-
-            s3.putObject(
-                    PutObjectRequest.builder()
-                            .bucket(bucketTrusted)
-                            .key(key)
-                            .contentType("text/csv")
-                            .build(),
-                    RequestBody.fromString(csvContent)
-            );
-
-            System.out.println("Arquivo salvo em: s3://" + bucketTrusted + "/" + key);
-            return key;
-
-        } catch (Exception e) {
-            System.out.println("Erro ao salvar arquivo no S3: " + e.getMessage());
-            return null;
-        }
-    }
-
-    public String salvarCSVTrusted(String empresaNome, String servidorNome, String csvContent) {
-        String dataAtual = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return salvarCSVTrusted(empresaNome, servidorNome, csvContent, dataAtual);
-    }
-
     public String lerCSVExistente(String key) {
         try {
             GetObjectRequest getRequest = GetObjectRequest.builder()
@@ -81,20 +50,6 @@ public class S3Manager {
         } catch (Exception e) {
             System.out.println("Arquivo não encontrado ou erro na leitura: " + key);
             return null;
-        }
-    }
-
-    public boolean arquivoExiste(String key) {
-        try {
-            GetObjectRequest getRequest = GetObjectRequest.builder()
-                    .bucket(bucketTrusted)
-                    .key(key)
-                    .build();
-
-            s3.getObject(getRequest).close();
-            return true;
-        } catch (Exception e) {
-            return false;
         }
     }
 
@@ -131,51 +86,6 @@ public class S3Manager {
         }
     }
 
-    public S3Object encontrarArquivoMaisRecente(String bucketName, String prefixo) {
-        try {
-            ListObjectsV2Request request = ListObjectsV2Request.builder()
-                    .bucket(bucketName)
-                    .prefix(prefixo)
-                    .build();
-
-            ListObjectsV2Response response = s3.listObjectsV2(request);
-
-            if (response.contents().isEmpty()) {
-                System.out.println("Nenhum arquivo encontrado no bucket: " + bucketName + " com prefixo: " + prefixo);
-                return null;
-            }
-
-            S3Object arquivoMaisRecente = null;
-            LocalDate dataMaisRecente = null;
-
-            for (S3Object obj : response.contents()) {
-                LocalDate dataArquivo = extrairDataDoNome(obj.key());
-                if (dataArquivo != null) {
-                    if (dataMaisRecente == null || dataArquivo.isAfter(dataMaisRecente)) {
-                        dataMaisRecente = dataArquivo;
-                        arquivoMaisRecente = obj;
-                    }
-                }
-            }
-
-            if (arquivoMaisRecente != null) {
-                System.out.println("Arquivo mais recente encontrado: " + arquivoMaisRecente.key());
-                System.out.println("Data do arquivo: " + dataMaisRecente);
-            } else {
-                System.out.println("Arquivos encontrados no bucket:");
-                for (S3Object obj : response.contents()) {
-                    System.out.println(" - " + obj.key());
-                }
-            }
-
-            return arquivoMaisRecente;
-
-        } catch (Exception e) {
-            System.out.println("Erro ao buscar arquivo mais recente: " + e.getMessage());
-            e.printStackTrace();
-            return null;
-        }
-    }
 
     public LocalDate extrairDataDoNome(String fileName) {
         if (fileName == null || fileName.isEmpty()) {
@@ -197,19 +107,4 @@ public class S3Manager {
         return null;
     }
 
-    public String gerarNomeComDataAtual() {
-        String dataAtual = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return "machine_data_" + dataAtual + ".csv";
-    }
-
-    public boolean ehArquivoDeHoje(String fileName) {
-        LocalDate dataArquivo = extrairDataDoNome(fileName);
-        return dataArquivo != null && dataArquivo.equals(LocalDate.now());
-    }
-
-    private String formatarNome(String nome) {
-        return nome.replaceAll("[^a-zA-Z0-9\\-_]", "_")
-                .replaceAll("_{2,}", "_")
-                .trim();
-    }
 }
