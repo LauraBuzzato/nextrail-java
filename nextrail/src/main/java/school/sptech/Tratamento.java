@@ -1,30 +1,46 @@
 package school.sptech;
 
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
 import org.springframework.jdbc.core.JdbcTemplate;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
-public class Tratamento {
+public class Tratamento implements RequestHandler<Map<String, String>, String> {
 
-    private static List<ServidorConfig> servidoresConfig = new ArrayList<>();
-    private static List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
+    private static final List<ServidorConfig> servidoresConfig = new ArrayList<>();
+    private static final List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
 
-    public static void main(String[] args) {
-        processar();
+    @Override
+    public String handleRequest(Map<String, String> event, Context context) {
+        LambdaLogger logger = context.getLogger();
+        logger.log("Iniciando processamento ETL via Lambda");
+
+        try {
+            String resultado = processar();
+
+            logger.log("Processamento ETL concluído com sucesso");
+            return "SUCCESS: " + resultado;
+
+        } catch (Exception e) {
+            logger.log("Erro fatal no processamento: " + e.getMessage());
+            e.printStackTrace();
+            return "ERROR: " + e.getMessage();
+        }
     }
 
     public static String processar() {
@@ -37,6 +53,7 @@ public class Tratamento {
         servidoresConfig.clear();
         arquivosPorServidor.clear();
 
+        S3Client s3 = null;
         try {
             System.out.println("INICIANDO PROCESSAMENTO ETL");
             resultado.append("INICIANDO PROCESSAMENTO ETL\n");
@@ -46,7 +63,7 @@ public class Tratamento {
             AlertaInsert alertaInsert = new AlertaInsert(con);
             Notificador notificador = new Notificador();
 
-            S3Client s3 = S3Client.builder()
+            s3 = S3Client.builder()
                     .region(software.amazon.awssdk.regions.Region.US_EAST_1)
                     .build();
 
@@ -558,7 +575,7 @@ public class Tratamento {
     private static ServidorConfig buscarServidorNoBanco(JdbcTemplate con, String servidorNome) {
         try {
             String sql = """
-                    SELECT DISTINCT s.id as id, s.nome as nome, e.razao_social as empresa_nome, 
+                    SELECT DISTINCT s.id as id, s.nome as nome, e.razao_social as empresa_nome,
                            e.id as empresa_id, ls.leituras_consecutivas_para_alerta as leituras_consecutivas_para_alerta
                     FROM servidor s
                     JOIN empresa e ON s.fk_empresa = e.id
@@ -588,8 +605,8 @@ public class Tratamento {
         ComponenteLimites limites = new ComponenteLimites();
         try {
             String sql = """
-            SELECT tc.nome_tipo_componente as nome_tipo_componente, 
-                   g.nome as gravidade, 
+            SELECT tc.nome_tipo_componente as nome_tipo_componente,
+                   g.nome as gravidade,
                    m.valor as valor
             FROM metrica m
             JOIN gravidade g ON m.fk_gravidade = g.id
