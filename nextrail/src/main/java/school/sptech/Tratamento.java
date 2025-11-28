@@ -29,8 +29,8 @@ public class Tratamento {
         Notificador notificador = new Notificador();
         S3Client s3 = S3Client.create();
 
-        String bucketRaw = "bucket-teste-python";
-        String bucketTrusted = "bucket-trusted-teste-tratamento";
+        String bucketRaw = "bucket-nextrail";
+        String bucketTrusted = "bucket-nextrail-trusted";
 
         List<String> servidoresProcessados = new ArrayList<>();
         S3Manager s3Manager = new S3Manager(s3, bucketTrusted);

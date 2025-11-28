@@ -7,8 +7,8 @@ import java.util.*;
 
 public class PrevisoesTrat {
 
-    private static final String TRUSTED_BUCKET = "bucket-trusted-teste-tratamento";
-    private static final String CLIENT_BUCKET = "bucket-client-teste-etl";
+    private static final String TRUSTED_BUCKET = "bucket-nextrail-trusted";
+    private static final String CLIENT_BUCKET = "bucket-nextrail-client";
 
     private static final S3Service s3 = new S3Service();
 
