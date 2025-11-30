@@ -116,9 +116,9 @@ public class PrevisoesTrat {
         List<Double> previsaoDisco = calcularPrevisaoComHistorico(mediasDisco);
         List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
 
-        return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia, empresa, servidor, "semanal");
+        return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia,
+                empresa, servidor, "semanal", mediasCpu, mediasRam, mediasDisco, mediasLatencia);
     }
-
 
     private static PrevisaoModel gerarPrevisaoMensal(List<PrevisaoModel> dadosHistoricos, String empresa, String servidor) {
         List<Double> mediasCpu = calcularMediasMensais(dadosHistoricos, "cpu");
@@ -131,7 +131,8 @@ public class PrevisoesTrat {
         List<Double> previsaoDisco = calcularPrevisaoComHistorico(mediasDisco);
         List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
 
-        return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia, empresa, servidor, "mensal");
+        return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia,
+                empresa, servidor, "mensal", mediasCpu, mediasRam, mediasDisco, mediasLatencia);
     }
 
     private static List<Double> calcularMediasSemanais(List<PrevisaoModel> dados, String componente) {
@@ -149,7 +150,6 @@ public class PrevisoesTrat {
         for (int i = 0; i < numSemanas; i++) {
             int inicio = i * registrosPorSemana;
             int fim = Math.min((i + 1) * registrosPorSemana, dados.size());
-
 
             if (inicio >= dados.size()) {
                 break;
@@ -259,8 +259,6 @@ public class PrevisoesTrat {
         return resultado;
     }
 
-
-
     private static void salvarPrevisaoClient(PrevisaoModel previsao, String empresa, String servidor,
                                              LocalDate data, String tipoPeriodo) throws Exception {
         String empresaFormatada = formatarNome(empresa);
@@ -273,7 +271,7 @@ public class PrevisoesTrat {
                 tipoPeriodo);
         s3.enviarJsonObject(CLIENT_BUCKET, key, previsao);
 
-        System.out.println("      Salvo em: " + key);
+        System.out.println("Salvo em: " + key);
     }
 
     private static String formatarNome(String nome) {
