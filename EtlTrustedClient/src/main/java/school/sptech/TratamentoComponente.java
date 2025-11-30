@@ -1,9 +1,8 @@
 package school.sptech;
 
-import software.amazon.awssdk.services.s3.model.*;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 public class TratamentoComponente {
 
@@ -12,99 +11,60 @@ public class TratamentoComponente {
 
     private static final S3Service s3 = new S3Service();
 
+    public static void processarComponentes() throws Exception {
 
-    // ============================================================
-    //   PROCESSAMENTO GERAL — LÊ CSV E EXPORTA PARA BUCKET CLIENT
-    // ============================================================
-    public static void processarComponentes() {
+        LocalDate hoje = LocalDate.now();
+        String hojeStr = hoje.toString();
 
-        try {
-            ListObjectsV2Response empresas = s3.listarPastas(TRUSTED_BUCKET);
+        System.out.println(">> Iniciando processamento de componentes...");
 
-            for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
+        // LISTAR empresas
+        var empresas = s3.listarPastas(TRUSTED_BUCKET);
 
-                String empresa = empresaPrefix.prefix().replace("/", "");
+        for (var empresaPrefix : empresas.commonPrefixes()) {
 
-                ListObjectsV2Response servidores =
-                        s3.listarComPrefixo(TRUSTED_BUCKET, empresa + "/", true);
+            String empresa = empresaPrefix.prefix();
+            var servidores = s3.listarComPrefixo(TRUSTED_BUCKET, empresa, true);
 
-                for (CommonPrefix servidorPrefix : servidores.commonPrefixes()) {
+            for (var servidorPrefix : servidores.commonPrefixes()) {
 
-                    String servidor = servidorPrefix.prefix()
-                            .replace(empresa + "/", "")
-                            .replace("/", "");
+                String servidor = servidorPrefix.prefix();
+                var arquivos = s3.listarComPrefixo(TRUSTED_BUCKET, servidor, false);
 
-                    processarServidor(empresa, servidor);
-                }
-            }
+                for (var arquivo : arquivos.contents()) {
 
-        } catch (Exception e) {
-            System.out.println("Erro em processarComponentes: " + e.getMessage());
-        }
-    }
-
-
-    private static void processarServidor(String empresa, String servidor) {
-
-        String prefix = String.format("%s/%s/", empresa, servidor);
-
-        try {
-            ListObjectsV2Response arquivos =
-                    s3.listarComPrefixo(TRUSTED_BUCKET, prefix, false);
-
-            for (S3Object arquivo : arquivos.contents()) {
-
-                String key = arquivo.key();
-
-                if (!key.endsWith(".csv")) continue;
-
-                try {
-                    String csv = s3.baixarArquivo(TRUSTED_BUCKET, key).asUtf8String();
-
-                    List<ComponenteModel> dados =
-                            ComponenteModel.parseCsv(csv, empresa, servidor);
-
-                    if (!dados.isEmpty()) {
-                        salvarNoClient(dados, empresa, servidor, key);
+                    if (!arquivo.key().contains("coleta_" + hojeStr + ".csv")) {
+                        continue;
                     }
 
-                } catch (Exception e) {
-                    System.out.println("Erro ao ler arquivo: " + key);
+                    // LER CSV DO DIA
+                    String csv = s3.baixarArquivo(TRUSTED_BUCKET, arquivo.key()).asUtf8String();
+
+                    List<ComponenteModel> dados = ComponenteModel.parseCsv(
+                            csv,
+                            empresa.replace("/", ""),
+                            servidor.replace(empresa, "").replace("/", "")
+                    );
+
+                    if (dados.isEmpty()) continue;
+
+                    // Key para salvar no bucket client
+                    String keySaida =
+                            servidor + "componentes/dadosComponentes_" +
+                                    hoje.getYear() + "-" + hoje.getMonthValue() + "-" + hoje.getDayOfMonth() + "_" +
+                                    hoje.getDayOfMonth() + "-" + hoje.getMonthValue() + "-" + hoje.getYear() +
+                                    ".json";
+
+                    // Converte lista de objetos para lista de Map (S3Service espera Map)
+                    List<Map<String, String>> dadosMap =
+                            ComponenteModelMapper.converterLista(dados);
+
+                    // Envia JSON para bucket client
+                    s3.enviarJsonLista(CLIENT_BUCKET, keySaida, dadosMap);
+
+                    System.out.println("ARQUIVO ATUALIZADO: " + keySaida);
                 }
             }
-
-        } catch (Exception e) {
-            System.out.println("Erro ao processar servidor " + servidor);
-        }
-    }
-
-
-    private static void salvarNoClient(List<ComponenteModel> dados,
-                                       String empresa, String servidor, String keyOrigem) {
-
-        try {
-            String dataArquivo = extrairData(keyOrigem);
-            String dataHoje = LocalDate.now()
-                    .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-
-            String keyOutput = String.format(
-                    "%s/%s/componentes/dadosComponentes_%s_%s.json",
-                    empresa, servidor, dataArquivo, dataHoje);
-
-            s3.enviarJsonObject(CLIENT_BUCKET, keyOutput, dados);
-
-        } catch (Exception e) {
-            System.out.println("Erro ao enviar JSON para client: " + e.getMessage());
-        }
-    }
-
-
-    private static String extrairData(String key) {
-        try {
-            String nome = key.substring(key.lastIndexOf("/") + 1);
-            return nome.replace("coleta_", "").replace(".csv", "");
-        } catch (Exception e) {
-            return "data-desconhecida";
         }
     }
 }
