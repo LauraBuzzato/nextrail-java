@@ -106,10 +106,22 @@ public class PrevisoesTrat {
     }
 
     private static PrevisaoModel gerarPrevisaoSemanal(List<PrevisaoModel> dadosHistoricos, String empresa, String servidor) {
-        List<Double> mediasCpu = calcularMediasSemanais(dadosHistoricos, "cpu");
-        List<Double> mediasRam = calcularMediasSemanais(dadosHistoricos, "ram");
-        List<Double> mediasDisco = calcularMediasSemanais(dadosHistoricos, "disco");
-        List<Double> mediasLatencia = calcularMediasSemanais(dadosHistoricos, "latencia");
+        List<Double> todosValoresCpu = new ArrayList<>();
+        List<Double> todosValoresRam = new ArrayList<>();
+        List<Double> todosValoresDisco = new ArrayList<>();
+        List<Double> todosValoresLatencia = new ArrayList<>();
+
+        for (PrevisaoModel dado : dadosHistoricos) {
+            todosValoresCpu.add(dado.getCpu().get(0));
+            todosValoresRam.add(dado.getRam().get(0));
+            todosValoresDisco.add(dado.getDisco().get(0));
+            todosValoresLatencia.add(dado.getLatencia().get(0));
+        }
+
+        List<Double> mediasCpu = calcularMediasSemanais(dadosHistoricos, "cpu", todosValoresCpu);
+        List<Double> mediasRam = calcularMediasSemanais(dadosHistoricos, "ram", todosValoresRam);
+        List<Double> mediasDisco = calcularMediasSemanais(dadosHistoricos, "disco", todosValoresDisco);
+        List<Double> mediasLatencia = calcularMediasSemanais(dadosHistoricos, "latencia", todosValoresLatencia);
 
         List<Double> previsaoCpu = calcularPrevisaoComHistorico(mediasCpu);
         List<Double> previsaoRam = calcularPrevisaoComHistorico(mediasRam);
@@ -117,14 +129,26 @@ public class PrevisoesTrat {
         List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
 
         return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia,
-                empresa, servidor, "semanal", mediasCpu, mediasRam, mediasDisco, mediasLatencia);
+                empresa, servidor, "semanal", todosValoresCpu, todosValoresRam, todosValoresDisco, todosValoresLatencia);
     }
 
     private static PrevisaoModel gerarPrevisaoMensal(List<PrevisaoModel> dadosHistoricos, String empresa, String servidor) {
-        List<Double> mediasCpu = calcularMediasMensais(dadosHistoricos, "cpu");
-        List<Double> mediasRam = calcularMediasMensais(dadosHistoricos, "ram");
-        List<Double> mediasDisco = calcularMediasMensais(dadosHistoricos, "disco");
-        List<Double> mediasLatencia = calcularMediasMensais(dadosHistoricos, "latencia");
+        List<Double> todosValoresCpu = new ArrayList<>();
+        List<Double> todosValoresRam = new ArrayList<>();
+        List<Double> todosValoresDisco = new ArrayList<>();
+        List<Double> todosValoresLatencia = new ArrayList<>();
+
+        for (PrevisaoModel dado : dadosHistoricos) {
+            todosValoresCpu.add(dado.getCpu().get(0));
+            todosValoresRam.add(dado.getRam().get(0));
+            todosValoresDisco.add(dado.getDisco().get(0));
+            todosValoresLatencia.add(dado.getLatencia().get(0));
+        }
+
+        List<Double> mediasCpu = calcularMediasMensais(dadosHistoricos, "cpu", todosValoresCpu);
+        List<Double> mediasRam = calcularMediasMensais(dadosHistoricos, "ram", todosValoresRam);
+        List<Double> mediasDisco = calcularMediasMensais(dadosHistoricos, "disco", todosValoresDisco);
+        List<Double> mediasLatencia = calcularMediasMensais(dadosHistoricos, "latencia", todosValoresLatencia);
 
         List<Double> previsaoCpu = calcularPrevisaoComHistorico(mediasCpu);
         List<Double> previsaoRam = calcularPrevisaoComHistorico(mediasRam);
@@ -132,86 +156,91 @@ public class PrevisoesTrat {
         List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
 
         return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia,
-                empresa, servidor, "mensal", mediasCpu, mediasRam, mediasDisco, mediasLatencia);
+                empresa, servidor, "mensal", todosValoresCpu, todosValoresRam, todosValoresDisco, todosValoresLatencia);
     }
 
-    private static List<Double> calcularMediasSemanais(List<PrevisaoModel> dados, String componente) {
+    private static List<Double> calcularMediasSemanais(List<PrevisaoModel> dados, String componente, List<Double> todosValores) {
         List<Double> medias = new ArrayList<>();
 
         if (dados.isEmpty()) {
             return medias;
         }
 
-        int registrosPorSemana = 7;
-        int numSemanas = Math.max(1, (dados.size() + registrosPorSemana - 1) / registrosPorSemana);
+        if (todosValores.size() >= 7) {
+            int numSemanas = Math.min(4, (todosValores.size() + 6) / 7);
 
-        numSemanas = Math.min(4, numSemanas);
+            for (int semana = 0; semana < numSemanas; semana++) {
+                int inicio = semana * 7;
+                int fim = Math.min((semana + 1) * 7, todosValores.size());
 
-        for (int i = 0; i < numSemanas; i++) {
-            int inicio = i * registrosPorSemana;
-            int fim = Math.min((i + 1) * registrosPorSemana, dados.size());
+                double soma = 0;
+                int count = 0;
 
-            if (inicio >= dados.size()) {
-                break;
-            }
-
-            double soma = 0;
-            int count = 0;
-
-            for (int j = inicio; j < fim; j++) {
-                switch (componente) {
-                    case "cpu": soma += dados.get(j).getCpu().get(0); break;
-                    case "ram": soma += dados.get(j).getRam().get(0); break;
-                    case "disco": soma += dados.get(j).getDisco().get(0); break;
-                    case "latencia": soma += dados.get(j).getLatencia().get(0); break;
+                for (int i = inicio; i < fim; i++) {
+                    soma += todosValores.get(i);
+                    count++;
                 }
-                count++;
-            }
 
-            if (count > 0) {
-                medias.add(soma / count);
+                if (count > 0) {
+                    medias.add(soma / count);
+                }
             }
+        } else {
+            medias.addAll(todosValores);
         }
 
         return medias;
     }
 
-    private static List<Double> calcularMediasMensais(List<PrevisaoModel> dados, String componente) {
+    private static List<Double> calcularMediasMensais(List<PrevisaoModel> dados, String componente, List<Double> todosValores) {
         List<Double> medias = new ArrayList<>();
 
         if (dados.isEmpty()) {
             return medias;
         }
 
-        int registrosPorMes = 30;
-        int numMeses = Math.max(1, (dados.size() + registrosPorMes - 1) / registrosPorMes);
+        if (todosValores.size() >= 14) {
+            if (todosValores.size() >= 30) {
+                int numMeses = Math.min(3, (todosValores.size() + 29) / 30);
 
-        numMeses = Math.min(3, numMeses);
+                for (int mes = 0; mes < numMeses; mes++) {
+                    int inicio = mes * 30;
+                    int fim = Math.min((mes + 1) * 30, todosValores.size());
 
-        for (int i = 0; i < numMeses; i++) {
-            int inicio = i * registrosPorMes;
-            int fim = Math.min((i + 1) * registrosPorMes, dados.size());
+                    double soma = 0;
+                    int count = 0;
 
-            if (inicio >= dados.size()) {
-                break;
-            }
+                    for (int i = inicio; i < fim; i++) {
+                        soma += todosValores.get(i);
+                        count++;
+                    }
 
-            double soma = 0;
-            int count = 0;
-
-            for (int j = inicio; j < fim; j++) {
-                switch (componente) {
-                    case "cpu": soma += dados.get(j).getCpu().get(0); break;
-                    case "ram": soma += dados.get(j).getRam().get(0); break;
-                    case "disco": soma += dados.get(j).getDisco().get(0); break;
-                    case "latencia": soma += dados.get(j).getLatencia().get(0); break;
+                    if (count > 0) {
+                        medias.add(soma / count);
+                    }
                 }
-                count++;
-            }
+            } else {
+                int numQuinzenas = Math.min(4, (todosValores.size() + 14) / 15);
 
-            if (count > 0) {
-                medias.add(soma / count);
+                for (int quinzena = 0; quinzena < numQuinzenas; quinzena++) {
+                    int inicio = quinzena * 15;
+                    int fim = Math.min((quinzena + 1) * 15, todosValores.size());
+
+                    double soma = 0;
+                    int count = 0;
+
+                    for (int i = inicio; i < fim; i++) {
+                        soma += todosValores.get(i);
+                        count++;
+                    }
+
+                    if (count > 0) {
+                        medias.add(soma / count);
+                    }
+                }
             }
+        } else {
+            medias.addAll(todosValores);
         }
 
         return medias;
