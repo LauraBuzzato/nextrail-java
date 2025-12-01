@@ -37,7 +37,7 @@ public class PrevisaoModel {
         this.dataProcessamento = LocalDateTime.now().toString();
         this.periodo = periodo;
 
-        calcularCrescimento(historicoCpu, historicoRam, historicoDisco, historicoLatencia);
+        calcularCrescimentoPorPeriodo(historicoCpu, historicoRam, historicoDisco, historicoLatencia, periodo);
     }
 
     public PrevisaoModel(List<Double> cpu, List<Double> ram, List<Double> disco,
@@ -46,32 +46,116 @@ public class PrevisaoModel {
                 new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
     }
 
-    private void calcularCrescimento(List<Double> historicoCpu, List<Double> historicoRam,
-                                     List<Double> historicoDisco, List<Double> historicoLatencia) {
+    private void calcularCrescimentoPorPeriodo(List<Double> historicoCpu, List<Double> historicoRam,
+                                               List<Double> historicoDisco, List<Double> historicoLatencia,
+                                               String periodo) {
 
-        this.crescimentoCpuPercentual = calcularCrescimentoPercentual(historicoCpu);
+        this.crescimentoCpuPercentual = calcularCrescimentoPeriodoEspecifico(historicoCpu, periodo);
         this.crescimentoCpuTendencia = determinarTendencia(this.crescimentoCpuPercentual);
 
-        this.crescimentoRamPercentual = calcularCrescimentoPercentual(historicoRam);
+        this.crescimentoRamPercentual = calcularCrescimentoPeriodoEspecifico(historicoRam, periodo);
         this.crescimentoRamTendencia = determinarTendencia(this.crescimentoRamPercentual);
 
-        this.crescimentoDiscoPercentual = calcularCrescimentoPercentual(historicoDisco);
+        this.crescimentoDiscoPercentual = calcularCrescimentoPeriodoEspecifico(historicoDisco, periodo);
         this.crescimentoDiscoTendencia = determinarTendencia(this.crescimentoDiscoPercentual);
 
-        this.crescimentoLatenciaPercentual = calcularCrescimentoPercentual(historicoLatencia);
+        this.crescimentoLatenciaPercentual = calcularCrescimentoPeriodoEspecifico(historicoLatencia, periodo);
         this.crescimentoLatenciaTendencia = determinarTendencia(this.crescimentoLatenciaPercentual);
     }
 
-    private double calcularCrescimentoPercentual(List<Double> historico) {
-        if (historico.size() < 2) {
+    private double calcularCrescimentoPeriodoEspecifico(List<Double> valores, String periodo) {
+        if (valores == null || valores.isEmpty()) {
             return 0.0;
         }
 
-        double valorAnterior = historico.get(historico.size() - 2);
-        double valorAtual = historico.get(historico.size() - 1);
+        if (periodo.equals("semanal")) {
+            return calcularCrescimentoSemanal(valores);
+        } else if (periodo.equals("mensal")) {
+            return calcularCrescimentoMensal(valores);
+        } else {
+            return calcularCrescimentoSimples(valores);
+        }
+    }
+
+    private double calcularCrescimentoSemanal(List<Double> valores) {
+        if (valores.size() >= 14) {
+            int totalDias = valores.size();
+            double mediaSemanaAtual = calcularMedia(valores, Math.max(0, totalDias - 7), totalDias - 1);
+            double mediaSemanaAnterior = calcularMedia(valores, Math.max(0, totalDias - 14), Math.max(0, totalDias - 8));
+
+            if (mediaSemanaAnterior > 0) {
+                double crescimento = ((mediaSemanaAtual - mediaSemanaAnterior) / mediaSemanaAnterior) * 100;
+                return Math.round(crescimento * 10.0) / 10.0;
+            }
+        } else if (valores.size() >= 7) {
+            int pontoMeio = valores.size() / 2;
+            double primeiraMetade = calcularMedia(valores, 0, pontoMeio - 1);
+            double segundaMetade = calcularMedia(valores, pontoMeio, valores.size() - 1);
+
+            if (primeiraMetade > 0) {
+                double crescimento = ((segundaMetade - primeiraMetade) / primeiraMetade) * 100;
+                return Math.round(crescimento * 10.0) / 10.0;
+            }
+        } else if (valores.size() >= 2) {
+            return calcularCrescimentoSimples(valores);
+        }
+
+        return 0.0;
+    }
+
+    private double calcularCrescimentoMensal(List<Double> valores) {
+        if (valores.size() >= 60) {
+            int totalDias = valores.size();
+            double mediaMesAtual = calcularMedia(valores, Math.max(0, totalDias - 30), totalDias - 1);
+            double mediaMesAnterior = calcularMedia(valores, Math.max(0, totalDias - 60), Math.max(0, totalDias - 31));
+
+            if (mediaMesAnterior > 0) {
+                double crescimento = ((mediaMesAtual - mediaMesAnterior) / mediaMesAnterior) * 100;
+                return Math.round(crescimento * 10.0) / 10.0;
+            }
+        } else if (valores.size() >= 30) {
+            int pontoMeio = valores.size() / 2;
+            double primeiraMetade = calcularMedia(valores, 0, pontoMeio - 1);
+            double segundaMetade = calcularMedia(valores, pontoMeio, valores.size() - 1);
+
+            if (primeiraMetade > 0) {
+                double crescimento = ((segundaMetade - primeiraMetade) / primeiraMetade) * 100;
+                return Math.round(crescimento * 10.0) / 10.0;
+            }
+        } else if (valores.size() >= 2) {
+            return calcularCrescimentoSimples(valores);
+        }
+
+        return 0.0;
+    }
+
+    private double calcularMedia(List<Double> valores, int inicio, int fim) {
+        if (inicio < 0 || fim >= valores.size() || inicio > fim) {
+            return 0.0;
+        }
+
+        double soma = 0;
+        int count = 0;
+
+        for (int i = inicio; i <= fim; i++) {
+            soma += valores.get(i);
+            count++;
+        }
+
+        return count > 0 ? soma / count : 0.0;
+    }
+
+    private double calcularCrescimentoSimples(List<Double> valores) {
+        if (valores.size() < 2) {
+            return 0.0;
+        }
+
+        double valorAnterior = valores.get(valores.size() - 2);
+        double valorAtual = valores.get(valores.size() - 1);
 
         if (valorAnterior > 0) {
-            return Math.round(((valorAtual - valorAnterior) / valorAnterior) * 100 * 10.0) / 10.0;
+            double crescimento = ((valorAtual - valorAnterior) / valorAnterior) * 100;
+            return Math.round(crescimento * 10.0) / 10.0;
         }
 
         return 0.0;
@@ -181,6 +265,7 @@ public class PrevisaoModel {
             return 0.0;
         }
     }
+
     private static LocalDateTime parseTimestamp(String timestampStr) {
         try {
             if (timestampStr.contains(".")) {

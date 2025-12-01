@@ -6,8 +6,8 @@ import java.util.Map;
 
 public class TratamentoComponente {
 
-    private static final String TRUSTED_BUCKET = "bucket-trusted-teste-tratamento";
-    private static final String CLIENT_BUCKET = "bucket-client-teste-etl";
+    private static final String TRUSTED_BUCKET = "trusted-nextrail-teste";
+    private static final String CLIENT_BUCKET = "client-nextrail-teste";
 
     private static final S3Service s3 = new S3Service();
 
@@ -16,7 +16,7 @@ public class TratamentoComponente {
         LocalDate hoje = LocalDate.now();
         String hojeStr = hoje.toString();
 
-        System.out.println(">> Iniciando processamento de componentes...");
+        System.out.println("Iniciando processamento de componentes...");
 
         // LISTAR empresas
         var empresas = s3.listarPastas(TRUSTED_BUCKET);
