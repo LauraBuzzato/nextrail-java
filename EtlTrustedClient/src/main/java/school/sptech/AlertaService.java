@@ -205,7 +205,7 @@ public class AlertaService {
         resultado.put("qtd_anterior", 0);
 
         try {
-            // Calcula as datas certinhas usando Java (evita erro de virada de ano)
+            // Calcula as datas certinhas (evita erro de virada de ano)
             LocalDate dataAtual = LocalDate.of(ano, mes, 1);
             LocalDate dataAnterior = dataAtual.minusMonths(1);
 
