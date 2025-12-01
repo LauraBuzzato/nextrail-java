@@ -8,4 +8,10 @@ import java.util.List;
 import java.util.Map;
 
 public class AlertaService {
+    private final JdbcTemplate con;
+
+    public AlertaService(JdbcTemplate con) {
+        this.con = con;
+    }
+
 }
