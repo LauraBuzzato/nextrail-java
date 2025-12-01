@@ -42,4 +42,16 @@ public class MontarKey {
             return "";
         }
     }
+
+
+    //Chave mensal
+    public static String gerarChaveMensalAlerta(String servidorPath, LocalDate data) {
+        String[] partes = servidorPath.split("/");
+        String empresa  = partes[0];
+        String servidor = partes[1];
+
+        return String.format("dadosDashAlertas/%s/%s/mensal_%d-%02d.json",
+                empresa, servidor,
+                data.getYear(), data.getMonthValue());
+    }
 }
