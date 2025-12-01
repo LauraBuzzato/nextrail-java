@@ -16,7 +16,7 @@ public class TratamentoComponente {
         LocalDate hoje = LocalDate.now();
         String hojeStr = hoje.toString();
 
-        System.out.println(">> Iniciando processamento de componentes...");
+        System.out.println("Iniciando processamento de componentes...");
 
         // LISTAR empresas
         var empresas = s3.listarPastas(TRUSTED_BUCKET);
