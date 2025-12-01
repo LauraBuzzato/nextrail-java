@@ -102,4 +102,43 @@ public class AlertaService {
 
         return contador;
     }
+
+
+
+    //Grafico de alertas mensais
+    public List<Map<String, Object>> buscarHistorico(Integer idServidor, int ano, Integer mes) {
+        try {
+            String formatoData = (mes != null) ? "%Y-%m-%d" : "%Y-%m";
+
+            StringBuilder sql = new StringBuilder();
+            //Usamos os apends apenas pra poder concatenar o estilo da data que veio
+            sql.append("SELECT DATE_FORMAT(a.inicio, '")
+                    .append(formatoData)
+                    .append("') as periodo, ")
+                    .append("tc.nome_tipo_componente as componente, ")
+                    .append("COUNT(a.id) as total ")
+                    .append("FROM alerta a ")
+                    .append("JOIN tipo_componente tc ON a.fk_componenteServidor_tipoComponente = tc.id ")
+                    .append("WHERE a.fk_componenteServidor_servidor = ? ")
+                    .append("AND YEAR(a.inicio) = ? ");
+
+            List<Object> params = new java.util.ArrayList<>();
+            params.add(idServidor);
+            params.add(ano);
+
+            if (mes != null) {
+                sql.append(" AND MONTH(a.inicio) = ?");
+                params.add(mes);
+            }
+
+            sql.append(" GROUP BY periodo, componente ORDER BY periodo ASC");
+
+            // O Spring JDBC já retorna List<Map<String, Object>> perfeito para JSON
+            return con.queryForList(sql.toString(), params.toArray());
+
+        } catch (Exception e) {
+            System.out.println("Erro ao buscar histórico diário: " + e.getMessage());
+            return new java.util.ArrayList<>();
+        }
+    }
 }
