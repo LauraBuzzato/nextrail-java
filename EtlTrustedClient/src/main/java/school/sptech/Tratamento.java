@@ -16,6 +16,7 @@ public class Tratamento {
         copiarEstrutura();
         PrevisoesTrat.processarPrevisoes();
         TratamentoComponente.processarComponentes();
+
     }
 
     public static void copiarEstrutura() throws Exception {

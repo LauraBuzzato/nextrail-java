@@ -6,8 +6,8 @@ import java.util.Map;
 
 public class TratamentoComponente {
 
-    private static final String TRUSTED_BUCKET = "bucket-trusted-teste-tratamento";
-    private static final String CLIENT_BUCKET = "bucket-client-teste-etl";
+    private static final String TRUSTED_BUCKET = "trusted-nextrail-teste";
+    private static final String CLIENT_BUCKET = "client-nextrail-teste";
 
     private static final S3Service s3 = new S3Service();
 
