@@ -23,16 +23,13 @@ public class RelatorioAlertas {
         StringBuilder relatorioConsolidado = new StringBuilder();
 
         System.out.println("Gerando relatório filtrado para servidores processados: " + servidoresProcessados);
-        relatorioConsolidado.append("=== RELATÓRIO DE PROCESSAMENTO ===\n");
+        relatorioConsolidado.append("RELATÓRIO DE PROCESSAMENTO\n");
 
         if (servidoresProcessados.isEmpty()) {
             System.out.println("Nenhum servidor processado para gerar relatório.");
             relatorioConsolidado.append("Nenhum servidor processado no CSV.\n");
 
-            notificador.enviarRelatorioConsolidado(
-                    "Relatório - Processamento CSV",
-                    "Nenhum servidor processado no CSV."
-            );
+            notificador.enviarSlack(relatorioConsolidado.toString());
             return relatorioConsolidado.toString();
         }
 
@@ -40,28 +37,26 @@ public class RelatorioAlertas {
 
         String sqlServidores = """
                 SELECT DISTINCT s.id as servidorId, s.nome as servidorNome, e.razao_social as empresaNome
-                FROM alerta a
-                JOIN servidor s ON a.fk_componenteServidor_servidor = s.id
+                FROM servidor s
                 JOIN empresa e ON s.fk_empresa = e.id
-                WHERE s.nome IN (""" + placeholders + ") " + """
-                AND a.inicio >= NOW() - INTERVAL 1 HOUR
-                """;
+                WHERE s.nome IN (""" + placeholders + ")";
 
         List<Map<String, Object>> servidores = con.queryForList(sqlServidores, servidoresProcessados.toArray());
 
         relatorioConsolidado.append("Servidores lidos do CSV: ").append(String.join(", ", servidoresProcessados)).append("\n");
         relatorioConsolidado.append("Total de servidores processados: ").append(servidoresProcessados.size()).append("\n");
+        relatorioConsolidado.append("Servidores encontrados no banco: ").append(servidores.size()).append("\n");
         relatorioConsolidado.append("------------------------------------------\n");
 
         if (servidores.isEmpty()) {
-            relatorioConsolidado.append("Nenhum alerta gerado durante o processamento para os servidores listados.\n");
-            relatorioConsolidado.append("Possíveis causas:\n");
-            relatorioConsolidado.append("- Os servidores não existem no banco de dados\n");
-            relatorioConsolidado.append("- Não houve alertas na última hora\n");
-            relatorioConsolidado.append("- Os nomes no CSV não correspondem aos nomes no banco\n");
+            relatorioConsolidado.append("Nenhum dos servidores processados foi encontrado no banco de dados.\n");
+            relatorioConsolidado.append("Verifique se os nomes no CSV correspondem aos nomes no banco.\n");
+
+            notificador.enviarSlack(relatorioConsolidado.toString());
+
         } else {
-            relatorioConsolidado.append("Servidores com alertas na última hora: ").append(servidores.size()).append("\n");
-            relatorioConsolidado.append("----------------------------------------\n");
+            List<TicketServidor> ticketsServidores = new ArrayList<>();
+            int servidoresComAlertas = 0;
 
             for (Map<String, Object> servidor : servidores) {
                 Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
@@ -69,34 +64,56 @@ public class RelatorioAlertas {
                 String empresaNome = (String) servidor.get("empresaNome");
 
                 Map<String, Integer> contadorGravidade = contarAlertasPorGravidade(servidorId);
-                Set<String> componentesAlto = buscarComponentesComAlertaAlto(servidorId);
+                int totalAlertas = contadorGravidade.get("Baixo") + contadorGravidade.get("Médio") + contadorGravidade.get("Alto");
 
                 relatorioConsolidado.append("Empresa: ").append(empresaNome).append("\n");
                 relatorioConsolidado.append("Servidor: ").append(servidorNome).append("\n");
-                relatorioConsolidado.append("Alertas - Baixo: ").append(contadorGravidade.get("Baixo"))
+                relatorioConsolidado.append("Alertas na última hora - Baixo: ").append(contadorGravidade.get("Baixo"))
                         .append(" | Médio: ").append(contadorGravidade.get("Médio"))
                         .append(" | Alto: ").append(contadorGravidade.get("Alto")).append("\n");
 
-                if (!componentesAlto.isEmpty()) {
-                    relatorioConsolidado.append("Componentes com ALERTA ALTO: ").append(String.join(", ", componentesAlto)).append("\n");
+                if (totalAlertas > 0) {
+                    servidoresComAlertas++;
+                    Set<String> componentesAlto = buscarComponentesComAlertaAlto(servidorId);
+
+                    if (!componentesAlto.isEmpty()) {
+                        relatorioConsolidado.append("Componentes com ALERTA ALTO: ").append(String.join(", ", componentesAlto)).append("\n");
+                    }
+
+                    StringBuilder descricaoTicket = new StringBuilder();
+                    descricaoTicket.append("=== DETALHES DO SERVIDOR ===\n");
+                    descricaoTicket.append("Empresa: ").append(empresaNome).append("\n");
+                    descricaoTicket.append("Servidor: ").append(servidorNome).append("\n");
+                    descricaoAlertasPorGravidade(servidorId, descricaoTicket);
+                    descricaoTicket.append("\nData/hora do processamento: ").append(new Date()).append("\n");
+
+                    String tituloTicket = String.format("%s - %s - Resumo de coleta",
+                            empresaNome, servidorNome);
+
+                    ticketsServidores.add(new TicketServidor(tituloTicket, descricaoTicket.toString()));
+
+                    relatorioConsolidado.append(">> TICKET JIRA CRIADO para este servidor\n");
                 } else {
-                    relatorioConsolidado.append("Nenhum componente com alerta alto\n");
+                    relatorioConsolidado.append(">> Nenhum alerta - Ticket Jira NÃO criado\n");
                 }
                 relatorioConsolidado.append("----------------------------------------\n");
             }
 
-
-            int totalAlertas = servidores.stream()
-                    .mapToInt(servidor -> {
-                        Integer servidorId = ((Number) servidor.get("servidorId")).intValue();
-                        Map<String, Integer> contador = contarAlertasPorGravidade(servidorId);
-                        return contador.get("Baixo") + contador.get("Médio") + contador.get("Alto");
-                    })
-                    .sum();
-
             relatorioConsolidado.append("RESUMO GERAL:\n");
-            relatorioConsolidado.append("Total de servidores com alertas: ").append(servidores.size()).append("\n");
-            relatorioConsolidado.append("Total de alertas gerados: ").append(totalAlertas).append("\n");
+            relatorioConsolidado.append("Total de servidores processados: ").append(servidores.size()).append("\n");
+            relatorioConsolidado.append("Servidores com alertas: ").append(servidoresComAlertas).append("\n");
+            relatorioConsolidado.append("Servidores sem alertas: ").append(servidores.size() - servidoresComAlertas).append("\n");
+            relatorioConsolidado.append("Total de tickets Jira criados: ").append(ticketsServidores.size()).append("\n");
+
+            if (!ticketsServidores.isEmpty()) {
+                System.out.println("\nCRIANDO TICKETS JIRA INDIVIDUAIS PARA SERVIDORES COM ALERTAS:");
+                for (TicketServidor ticket : ticketsServidores) {
+                    System.out.println("Criando ticket para: " + ticket.getTitulo());
+                    notificador.criarJiraTicketIndividual(ticket.getTitulo(), ticket.getDescricao());
+                }
+            } else {
+                System.out.println("Nenhum servidor com alertas - Nenhum ticket Jira será criado.");
+            }
         }
 
         relatorioConsolidado.append("Período analisado: Última hora\n");
@@ -105,12 +122,42 @@ public class RelatorioAlertas {
         System.out.println("RELATÓRIO CONSOLIDADO:");
         System.out.println(relatorioConsolidado);
 
-        notificador.enviarRelatorioConsolidado(
-                "Relatório - Processamento CSV - " + servidoresProcessados.size() + " servidores",
-                relatorioConsolidado.toString()
-        );
+        notificador.enviarSlack(relatorioConsolidado.toString());
 
         return relatorioConsolidado.toString();
+    }
+
+    private void descricaoAlertasPorGravidade(Integer servidorId, StringBuilder descricao) {
+        try {
+            String sql = """
+                    SELECT g.nome as gravidade, tc.nome_tipo_componente as componente, 
+                           COUNT(a.id) as total, MAX(a.inicio) as ultimo_alerta
+                    FROM alerta a
+                    JOIN gravidade g ON a.fk_gravidade = g.id
+                    JOIN tipo_componente tc ON a.fk_componenteServidor_tipoComponente = tc.id
+                    WHERE a.fk_componenteServidor_servidor = ?
+                    AND a.inicio >= NOW() - INTERVAL 1 HOUR
+                    GROUP BY g.id, g.nome, tc.nome_tipo_componente
+                    ORDER BY g.id DESC, tc.nome_tipo_componente
+                    """;
+
+            List<Map<String, Object>> resultados = con.queryForList(sql, servidorId);
+
+            if (resultados.isEmpty()) {
+                descricao.append("Nenhum alerta específico encontrado na última hora.\n");
+                return;
+            }
+
+            descricao.append("Alertas na última hora:\n");
+            for (Map<String, Object> row : resultados) {
+                String gravidade = (String) row.get("gravidade");
+                String componente = (String) row.get("componente");
+                int total = ((Number) row.get("total")).intValue();
+                descricao.append(String.format("- %s (%s): %d alerta(s)\n", componente, gravidade, total));
+            }
+        } catch (Exception e) {
+            descricao.append("Erro ao obter detalhes dos alertas: ").append(e.getMessage()).append("\n");
+        }
     }
 
     private Map<String, Integer> contarAlertasPorGravidade(Integer servidorId) {
@@ -137,14 +184,8 @@ public class RelatorioAlertas {
                 contador.put(gravidade, total);
             }
 
-            System.out.println("Contagem alertas - Servidor " + servidorId +
-                    ": Alto: " + contador.get("Alto") +
-                    ", Médio: " + contador.get("Médio") +
-                    ", Baixo: " + contador.get("Baixo"));
-
         } catch (Exception e) {
-            System.out.println("Erro ao contar alertas: " + e.getMessage());
-            e.printStackTrace();
+            System.out.println("Erro ao contar alertas para servidor " + servidorId + ": " + e.getMessage());
         }
 
         return contador;
@@ -159,7 +200,7 @@ public class RelatorioAlertas {
                     FROM alerta a
                     JOIN tipo_componente tc ON a.fk_componenteServidor_tipoComponente = tc.id
                     WHERE a.fk_componenteServidor_servidor = ?
-                    AND a.fk_gravidade = 3  -- Alto
+                    AND a.fk_gravidade = 3
                     AND a.inicio >= NOW() - INTERVAL 1 HOUR
                     """;
 
@@ -169,12 +210,28 @@ public class RelatorioAlertas {
                 componentes.add((String) row.get("componente"));
             }
 
-            System.out.println("Componentes com alerta ALTO - Servidor " + servidorId + ": " + componentes);
-
         } catch (Exception e) {
             System.out.println("Erro ao buscar componentes com alerta alto: " + e.getMessage());
         }
 
         return componentes;
+    }
+
+    private static class TicketServidor {
+        private String titulo;
+        private String descricao;
+
+        public TicketServidor(String titulo, String descricao) {
+            this.titulo = titulo;
+            this.descricao = descricao;
+        }
+
+        public String getTitulo() {
+            return titulo;
+        }
+
+        public String getDescricao() {
+            return descricao;
+        }
     }
 }

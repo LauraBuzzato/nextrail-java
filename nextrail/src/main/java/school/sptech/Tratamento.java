@@ -17,15 +17,14 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-
 
 public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
     private static final List<ServidorConfig> servidoresConfig = new ArrayList<>();
     private static final List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
-
 
     @Override
     public String handleRequest(Map<String, Object> event, Context context) {
@@ -33,15 +32,97 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
         logger.log("Iniciando processamento ETL via Lambda");
 
         try {
-            String resultado = processar();
-
-            logger.log("Processamento ETL concluído com sucesso");
-            return "SUCCESS: " + resultado;
-
+            String resultado = processarComIntervalo();
+            logger.log("Processamento concluído");
+            return resultado;
         } catch (Exception e) {
             logger.log("Erro fatal no processamento: " + e.getMessage());
             e.printStackTrace();
             return "ERROR: " + e.getMessage();
+        }
+    }
+
+    public static String processarComIntervalo() {
+        try {
+            BancoData banco = new BancoData();
+            JdbcTemplate con = banco.con;
+
+            LocalDateTime ultimaExecucao = buscarUltimaExecucao(con);
+
+            if (!deveExecutar(ultimaExecucao)) {
+                long minutosPassados = java.time.temporal.ChronoUnit.MINUTES.between(ultimaExecucao, LocalDateTime.now());
+                System.out.println("Ainda não passou 1 hora desde a última execução. Minutos desde última execução: " + minutosPassados);
+                return "SKIPPED: Ainda não passou 1 hora desde a última execução. " + minutosPassados + " minutos desde última execução.";
+            }
+
+            System.out.println("Passou 1 hora desde a última execução. Iniciando processamento...");
+
+            atualizarUltimaExecucao(con);
+
+            return processar();
+
+        } catch (Exception e) {
+            System.err.println("Erro no controle de intervalo: " + e.getMessage());
+            e.printStackTrace();
+            return "ERROR_NO_INTERVALO: " + e.getMessage();
+        }
+    }
+
+    private static boolean deveExecutar(LocalDateTime ultimaExecucao) {
+        if (ultimaExecucao == null) {
+            return true;
+        }
+
+        long minutosPassados = java.time.temporal.ChronoUnit.MINUTES.between(ultimaExecucao, LocalDateTime.now());
+        return minutosPassados >= 60;
+    }
+
+    private static LocalDateTime buscarUltimaExecucao(JdbcTemplate con) {
+        try {
+            criarTabelaControleSeNecessario(con);
+
+            String sql = "SELECT ultima_execucao FROM controle_execucao_etl WHERE id = 1";
+
+            try {
+                String ultimaExecucaoStr = con.queryForObject(sql, String.class);
+                if (ultimaExecucaoStr != null) {
+                    return LocalDateTime.parse(ultimaExecucaoStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                }
+            } catch (Exception e) {
+                System.out.println("Primeira execução ou tabela vazia");
+            }
+
+            return null;
+
+        } catch (Exception e) {
+            System.err.println("Erro ao buscar última execução: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void atualizarUltimaExecucao(JdbcTemplate con) {
+        try {
+            String horarioAtual = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+
+            String sql = "INSERT INTO controle_execucao_etl (id, ultima_execucao, data_atualizacao) VALUES (1, ?, NOW()) ON DUPLICATE KEY UPDATE ultima_execucao = ?, data_atualizacao = NOW()";
+
+            con.update(sql, horarioAtual, horarioAtual);
+            System.out.println("Última execução atualizada para: " + horarioAtual);
+
+        } catch (Exception e) {
+            System.err.println("Erro ao atualizar última execução: " + e.getMessage());
+        }
+    }
+
+    private static void criarTabelaControleSeNecessario(JdbcTemplate con) {
+        try {
+            String sql = "CREATE TABLE IF NOT EXISTS controle_execucao_etl (id INT PRIMARY KEY, ultima_execucao DATETIME NULL, data_atualizacao DATETIME NOT NULL)";
+
+            con.execute(sql);
+            System.out.println("Tabela de controle verificada/criada");
+
+        } catch (Exception e) {
+            System.err.println("Erro ao criar tabela de controle: " + e.getMessage());
         }
     }
 
@@ -186,7 +267,6 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
             System.err.println(erro);
             e.printStackTrace();
             resultado.append("ERRO: ").append(erro).append("\n");
-
             resultado.append("Stack trace: ").append(Arrays.toString(e.getStackTrace())).append("\n");
         } finally {
             servidoresConfig.clear();
@@ -608,16 +688,7 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
         try {
             System.out.println("Buscando servidor no banco: '" + servidorNome + "'");
 
-            String sql = """
-                SELECT s.id, s.nome, e.razao_social as empresa_nome, 
-                       e.id as empresa_id, 
-                       COALESCE(ls.leituras_consecutivas_para_alerta, 3) as leituras_consecutivas_para_alerta
-                FROM servidor s
-                JOIN empresa e ON s.fk_empresa = e.id
-                LEFT JOIN leitura_script ls ON ls.fk_servidor = s.id
-                WHERE s.nome = ?
-                LIMIT 1
-                """;
+            String sql = "SELECT s.id, s.nome, e.razao_social as empresa_nome, e.id as empresa_id, COALESCE(ls.leituras_consecutivas_para_alerta, 3) as leituras_consecutivas_para_alerta FROM servidor s JOIN empresa e ON s.fk_empresa = e.id LEFT JOIN leitura_script ls ON ls.fk_servidor = s.id WHERE s.nome = ? LIMIT 1";
 
             List<ServidorConfig> resultados = con.query(sql, (rs, rowNum) ->
                     new ServidorConfig(
@@ -662,16 +733,7 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
     private static ComponenteLimites buscarLimitesServidor(JdbcTemplate con, int servidorId) {
         ComponenteLimites limites = new ComponenteLimites();
         try {
-            String sql = """
-            SELECT tc.nome_tipo_componente as nome_tipo_componente,
-                   g.nome as gravidade,
-                   m.valor as valor
-            FROM metrica m
-            JOIN gravidade g ON m.fk_gravidade = g.id
-            JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id
-            WHERE m.fk_componenteServidor_servidor = ?
-            ORDER BY tc.nome_tipo_componente, g.id
-            """;
+            String sql = "SELECT tc.nome_tipo_componente as nome_tipo_componente, g.nome as gravidade, m.valor as valor FROM metrica m JOIN gravidade g ON m.fk_gravidade = g.id JOIN tipo_componente tc ON m.fk_componenteServidor_tipoComponente = tc.id WHERE m.fk_componenteServidor_servidor = ? ORDER BY tc.nome_tipo_componente, g.id";
 
             List<MetricaLimite> metricas = con.query(sql, (rs, rowNum) ->
                     new MetricaLimite(

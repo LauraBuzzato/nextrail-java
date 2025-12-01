@@ -45,16 +45,6 @@ public class Notificador {
         }
     }
 
-    public void criarJira(String titulo, String descricao) {
-
-        String[] tiposIssue = {"Bug"};
-
-        for (String tipo : tiposIssue) {
-            if (tentarCriarJiraComTipo(titulo, descricao, tipo)) {
-                break;
-            }
-        }
-    }
 
     private boolean tentarCriarJiraComTipo(String titulo, String descricao, String issueType) {
         try {
@@ -111,6 +101,19 @@ public class Notificador {
         }
     }
 
+
+
+    public void criarJiraTicketIndividual(String titulo, String mensagem) {
+        String[] tiposIssue = {"Task", "Bug"}; //
+
+        for (String tipo : tiposIssue) {
+            if (tentarCriarJiraComTipo(titulo, mensagem, tipo)) {
+                System.out.println("Ticket individual criado com sucesso: " + titulo);
+                break;
+            }
+        }
+    }
+
     public void enviarRelatorioConsolidado(String titulo, String mensagem) {
         System.out.println("ENVIANDO RELATÓRIO CONSOLIDADO:");
 
@@ -118,6 +121,6 @@ public class Notificador {
         enviarSlack(mensagem);
 
         System.out.println("\nEnviando para Jira...");
-        criarJira(titulo, mensagem);
+        criarJiraTicketIndividual(titulo, mensagem);
     }
 }
