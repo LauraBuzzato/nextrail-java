@@ -54,4 +54,15 @@ public class MontarKey {
                 empresa, servidor,
                 data.getYear(), data.getMonthValue());
     }
+
+
+    public static String gerarChaveAnualAlerta(String servidorPath, LocalDate data) {
+        String[] partes = servidorPath.split("/");
+        String empresa  = partes[0];
+        String servidor = partes[1];
+
+        return String.format("dadosDashAlertas/%s/%s/anual_%d.json",
+                empresa, servidor,
+                data.getYear());
+    }
 }
