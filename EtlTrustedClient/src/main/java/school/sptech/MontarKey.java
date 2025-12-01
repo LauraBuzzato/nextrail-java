@@ -27,4 +27,19 @@ public class MontarKey {
                 empresa, servidor,
                 data.getYear());
     }
+
+
+
+    //Enzo
+    public static String extrairNomeServidor(String servidorPath) {
+        String[] partes = servidorPath.split("/");
+
+        // Verifica se a divisão resultou na (empresa e servidor).
+
+        if (partes.length > 1) {
+            return partes[1];
+        } else {
+            return "";
+        }
+    }
 }
