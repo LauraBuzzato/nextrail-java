@@ -20,10 +20,12 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+
 public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
     private static final List<ServidorConfig> servidoresConfig = new ArrayList<>();
     private static final List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
+
 
     @Override
     public String handleRequest(Map<String, Object> event, Context context) {
