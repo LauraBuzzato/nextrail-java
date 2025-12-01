@@ -141,4 +141,38 @@ public class AlertaService {
             return new java.util.ArrayList<>();
         }
     }
+
+
+
+    public Double calcularMTTR(Integer idServidor, int ano, Integer mes) {
+        try {
+            // Calcula a média da diferença em MINUTOS entre inicio e fim
+            // Só considera alertas que já finalizaram (fim IS NOT NULL)
+            StringBuilder sql = new StringBuilder("""
+                        SELECT AVG(TIMESTAMPDIFF(MINUTE, inicio, fim)) 
+                        FROM alerta
+                        WHERE fk_componenteServidor_servidor = ?
+                        AND YEAR(inicio) = ?
+                        AND fim IS NOT NULL
+                    """);
+
+            List<Object> params = new ArrayList<>();
+            params.add(idServidor);
+            params.add(ano);
+
+            if (mes != null) {
+                sql.append(" AND MONTH(inicio) = ?");
+                params.add(mes);
+            }
+
+            Double mttr = con.queryForObject(sql.toString(), Double.class, params.toArray());
+
+            // Se não houver alertas, retorna 0.0 em vez de null
+            return mttr != null ? mttr : 0.0;
+
+        } catch (Exception e) {
+            System.out.println("Erro ao calcular MTTR: " + e.getMessage());
+            return 0.0;
+        }
+    }
 }
