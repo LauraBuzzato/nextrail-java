@@ -237,4 +237,40 @@ public class AlertaService {
         return resultado;
     }
 
+
+    public Map<String, Integer> buscarComparacaoAnoAnterior(Integer idServidor, int anoAtual) {
+        Map<String, Integer> resultado = new HashMap<>();
+        resultado.put("qtd_atual", 0);
+        resultado.put("qtd_anterior", 0);
+
+        try {
+            StringBuilder sql = new StringBuilder("""
+            SELECT 
+                SUM(CASE WHEN YEAR(inicio) = ? THEN 1 ELSE 0 END) as qtd_atual,
+                SUM(CASE WHEN YEAR(inicio) = ? THEN 1 ELSE 0 END) as qtd_anterior
+            FROM alerta
+            WHERE fk_componenteServidor_servidor = ?
+        """);
+
+            List<Object> params = new ArrayList<>();
+            params.add(anoAtual);
+            params.add(anoAtual - 1);
+            params.add(idServidor);
+
+            Map<String, Object> linha = con.queryForMap(sql.toString(), params.toArray());
+
+            if (linha != null) {
+                Number atual = (Number) linha.get("qtd_atual");
+                Number anterior = (Number) linha.get("qtd_anterior");
+
+                resultado.put("qtd_atual", atual != null ? atual.intValue() : 0);
+                resultado.put("qtd_anterior", anterior != null ? anterior.intValue() : 0);
+            }
+
+        } catch (Exception e) {
+            System.out.println("Erro ao buscar comparação anual: " + e.getMessage());
+        }
+        return resultado;
+    }
+
 }
