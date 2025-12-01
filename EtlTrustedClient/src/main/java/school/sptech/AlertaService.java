@@ -196,5 +196,45 @@ public class AlertaService {
             return 0;
         }
     }
-    
+
+
+
+    public Map<String, Integer> buscarComparacaoMesAnterior(Integer idServidor, int ano, int mes) {
+        Map<String, Integer> resultado = new HashMap<>();
+        resultado.put("qtd_atual", 0);
+        resultado.put("qtd_anterior", 0);
+
+        try {
+            // Calcula as datas certinhas usando Java (evita erro de virada de ano)
+            LocalDate dataAtual = LocalDate.of(ano, mes, 1);
+            LocalDate dataAnterior = dataAtual.minusMonths(1);
+
+            StringBuilder sql = new StringBuilder("""
+                SELECT 
+                    SUM(CASE WHEN MONTH(inicio) = ? AND YEAR(inicio) = ? THEN 1 ELSE 0 END) as qtd_atual,
+                    SUM(CASE WHEN MONTH(inicio) = ? AND YEAR(inicio) = ? THEN 1 ELSE 0 END) as qtd_anterior
+                FROM alerta
+                WHERE fk_componenteServidor_servidor = ?
+            """);
+
+            List<Object> params = new ArrayList<>();
+            params.add(dataAtual.getMonthValue()); // Mês Atual
+            params.add(dataAtual.getYear());       // Ano Atual
+            params.add(dataAnterior.getMonthValue()); // Mês Anterior
+            params.add(dataAnterior.getYear());       // Ano Anterior
+            params.add(idServidor);
+
+            Map<String, Object> linha = con.queryForMap(sql.toString(), params.toArray());
+
+            if (linha != null) {
+                resultado.put("qtd_atual", ((Number) linha.get("qtd_atual")).intValue());
+                resultado.put("qtd_anterior", ((Number) linha.get("qtd_anterior")).intValue());
+            }
+
+        } catch (Exception e) {
+            System.out.println("Erro ao buscar comparação mensal: " + e.getMessage());
+        }
+        return resultado;
+    }
+
 }
