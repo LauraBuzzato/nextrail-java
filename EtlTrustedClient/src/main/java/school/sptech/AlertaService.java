@@ -175,4 +175,26 @@ public class AlertaService {
             return 0.0;
         }
     }
+
+
+    public Integer buscarSla(Integer idServidor) {
+        try {
+            String sql = """
+                        SELECT ROUND(AVG(DISTINCT sla), 0)
+                        FROM metrica
+                        WHERE fk_componenteServidor_servidor = ?
+                        AND sla > 0
+                    """;
+
+
+            Integer sla = con.queryForObject(sql, Integer.class, idServidor);
+
+            return sla != null ? sla : 0;
+
+        } catch (Exception e) {
+            System.out.println("Erro ao buscar SLA: " + e.getMessage());
+            return 0;
+        }
+    }
+    
 }
