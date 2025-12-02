@@ -18,9 +18,9 @@ public class S3Service {
     private final S3Client s3;
 
     public S3Service() {
+
         this.s3 = S3Client.builder()
                 .region(Region.US_EAST_1)
-                .credentialsProvider(ProfileCredentialsProvider.create())
                 .build();
     }
 

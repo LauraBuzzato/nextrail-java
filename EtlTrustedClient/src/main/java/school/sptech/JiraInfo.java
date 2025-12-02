@@ -28,7 +28,7 @@ public class JiraInfo {
     private static final S3Service s3 = new S3Service();
 
 
-    public static void main(String[] args) {
+    public static void jiraMain() {
         // credencias do jira
         final String jiraEmail = Credenciais.getJiraEmail();
         final String jiraApiToken = Credenciais.getJiraApiTokenAdmin();

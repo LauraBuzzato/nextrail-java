@@ -1,31 +1,83 @@
 package school.sptech;
 
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
 import software.amazon.awssdk.services.s3.model.*;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
-public class Tratamento {
+public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
     private static final String TRUSTED_BUCKET = "trusted-nextrail-teste";
-    private static final String CLIENT_BUCKET  = "client-nextrail-teste";
+    private static final String CLIENT_BUCKET = "client-nextrail-teste";
 
     private static final S3Service s3 = new S3Service();
 
-    public static void main(String[] args) throws Exception {
+    public String handleRequest(Map<String, Object> input, Context context) {
+        LambdaLogger logger = context.getLogger();
+        logger.log("Start");
+
+        try {
+            if (isJiraEvent(input)) {
+                logger.log("Executando apenas JiraInfo.jiraMain()");
+                JiraInfo.jiraMain();
+                logger.log("Jira finalizado!");
+                return "JiraInfo executado com sucesso!";
+            } else {
+                String resultado = realizarFluxoCompleto();
+                logger.log("finalizado!");
+                return resultado;
+            }
+        } catch (Exception e) {
+            logger.log("Erro na realização da ETL2" + e.getMessage());
+            return "ERRO";
+        }
+    }
+
+    private boolean isJiraEvent(Map<String, Object> input) {
+        if (input == null || input.isEmpty()) {
+            return false;
+        }
+
+        if (input.containsKey("detail-type") && input.containsKey("source")) {
+            String source = (String) input.get("source");
+            String detailType = (String) input.get("detail-type");
+
+            if ("aws.events".equals(source) && "Scheduled Event".equals(detailType)) {
+                Object resourcesObj = input.get("resources");
+                if (resourcesObj instanceof List) {
+                    List<?> resources = (List<?>) resourcesObj;
+                    for (Object resource : resources) {
+                        if (resource instanceof String) {
+                            String arn = (String) resource;
+                            if (arn.contains("jira-nextrail")) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private String realizarFluxoCompleto() throws Exception {
         copiarEstrutura();
         PrevisoesTrat.processarPrevisoes();
         TratamentoComponente.processarComponentes();
         AlertasTrat.processarAlertas();
+        return "Sucesso!";
     }
 
     public static void copiarEstrutura() throws Exception {
-
         LocalDate hoje = LocalDate.now();
         String hojeStr = hoje.toString();
 
         try {
-            // empresas
             ListObjectsV2Response empresas = s3.listarPastas(TRUSTED_BUCKET);
 
             for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
@@ -46,28 +98,19 @@ public class Tratamento {
                             continue;
                         }
 
-                        // Baixar CSV do dia
                         String csv = s3.baixarArquivo(TRUSTED_BUCKET, arquivo.key()).asUtf8String();
 
-                        // Converter CSV do dia
                         List<Map<String, String>> dadosDoDia = CsvConverter.csvToList(csv);
-
-                        // Mensal
 
                         String chaveMensal = MontarKey.gerarMensalKey(arquivo.key(), hoje);
 
-                        // Carregar JSON mensal existente (se houver)
                         List<Map<String, String>> existenteMensal = s3.baixarJsonLista(CLIENT_BUCKET, chaveMensal);
 
-                        // Junta os dois
                         existenteMensal.addAll(dadosDoDia);
 
-                        // Envia para o S3
                         s3.enviarJsonLista(CLIENT_BUCKET, chaveMensal, existenteMensal);
 
                         System.out.println("MENSAL atualizado: " + chaveMensal);
-
-                        // Anual
 
                         String chaveAnual = MontarKey.gerarAnualKey(arquivo.key(), hoje);
 

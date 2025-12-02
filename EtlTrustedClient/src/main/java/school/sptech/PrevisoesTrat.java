@@ -14,7 +14,6 @@ public class PrevisoesTrat {
 
     public static void processarPrevisoes() throws Exception {
         LocalDate hoje = LocalDate.now();
-
         try {
             ListObjectsV2Response empresas = s3.listarPastas(TRUSTED_BUCKET);
 
