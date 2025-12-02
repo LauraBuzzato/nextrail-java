@@ -1,7 +1,6 @@
 package school.sptech;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-
 import java.util.*;
 
 public class RelatorioAlertas {
@@ -28,8 +27,7 @@ public class RelatorioAlertas {
         if (servidoresProcessados.isEmpty()) {
             System.out.println("Nenhum servidor processado para gerar relatório.");
             relatorioConsolidado.append("Nenhum servidor processado no CSV.\n");
-
-            notificador.enviarSlack(relatorioConsolidado.toString());
+            notificador.enviarRelatorioConsolidado("Relatório ETL - Nenhum servidor", relatorioConsolidado.toString());
             return relatorioConsolidado.toString();
         }
 
@@ -51,8 +49,7 @@ public class RelatorioAlertas {
         if (servidores.isEmpty()) {
             relatorioConsolidado.append("Nenhum dos servidores processados foi encontrado no banco de dados.\n");
             relatorioConsolidado.append("Verifique se os nomes no CSV correspondem aos nomes no banco.\n");
-
-            notificador.enviarSlack(relatorioConsolidado.toString());
+            notificador.enviarRelatorioConsolidado("Relatório ETL - Nenhum servidor no banco", relatorioConsolidado.toString());
 
         } else {
             List<TicketServidor> ticketsServidores = new ArrayList<>();
@@ -122,7 +119,7 @@ public class RelatorioAlertas {
         System.out.println("RELATÓRIO CONSOLIDADO:");
         System.out.println(relatorioConsolidado);
 
-        notificador.enviarSlack(relatorioConsolidado.toString());
+        notificador.enviarRelatorioConsolidado("Relatório ETL Consolidado", relatorioConsolidado.toString());
 
         return relatorioConsolidado.toString();
     }
