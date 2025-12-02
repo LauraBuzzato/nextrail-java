@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -24,7 +25,7 @@ import java.time.format.DateTimeFormatter;
 
 public class JiraInfo {
 
-    private static final String CLIENT_BUCKET = "bucket-nr-prod-client";
+    private static final String CLIENT_BUCKET = "nextrail-client-log";
     private static final S3Service s3 = new S3Service();
 
 
@@ -43,13 +44,13 @@ public class JiraInfo {
 
             final String fields = "created,assignee,resolutiondate";
             final String expand = "changelog";
-            
+
             final String jqlQuery = "project = \"AAC\" AND resolutiondate >= startOfDay(-1) AND resolutiondate < startOfDay()";
             String encodedJql = URLEncoder.encode(jqlQuery, StandardCharsets.UTF_8);
 
             URL url = new URL("https://nextrailsuporte.atlassian.net/rest/api/3/search/jql?jql="+encodedJql+"&fields="+fields+"&expand="+expand);
             System.out.println("URL: "+url.toString());
-            
+
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setRequestProperty("Authorization", "Basic " + jiraAuthToken);
@@ -106,7 +107,7 @@ public class JiraInfo {
                         OffsetDateTime createdHistoryDate = OffsetDateTime.parse(history.getCreated(), JIRA_DATE_FORMATTER);
 
                         for (JiraSearchResponse.ChangeItem changeItem : history.getChangeItems()) {
-                            
+
                             String field = changeItem.getField();
                             String fromString = changeItem.getFromString();
                             String toString = changeItem.getToString();
@@ -116,15 +117,15 @@ public class JiraInfo {
                                 System.out.println("==========================================");
                                 System.out.println("Primeira alteração do issue: " + id);
                                 System.out.println("Assignee atual (TICKETS P SUP): " + displayName);
-                                System.out.println("Criação do issue (MTTA): " + 
-                                        createdIssueDate.toString());    
-                                System.out.println("Data da primeira atribuição (MTTA): " + 
+                                System.out.println("Criação do issue (MTTA): " +
+                                        createdIssueDate.toString());
+                                System.out.println("Data da primeira atribuição (MTTA): " +
                                         createdHistoryDate.toString());
                                 System.out.println("");
                                 System.out.println("Data de resolução: " + resolutionDate.toString());
                                 System.out.println("Campo alterado: " + field);
                                 System.out.println("Atribuido anterior (tem q ser null): " + fromString);
-                                System.out.println("Primeiro atribuido (pode nao ser o atual): " + 
+                                System.out.println("Primeiro atribuido (pode nao ser o atual): " +
                                         toString);
 
                                 Suporte suporte = encontrarSuporte(listaSuporte, displayName);
@@ -148,47 +149,33 @@ public class JiraInfo {
                 }
 
                 try {
-                    // mandando json para o bucket
-                    System.out.println("==============================");
-                    System.out.println("JSON CLIENT FINAL:");
-                    System.out.println("==============================");
-
                     ObjectMapper objectMapper = new ObjectMapper();
-                
                     String jsonClient = objectMapper.writeValueAsString(listaSuporte);
 
-                    System.out.println(jsonClient);
-                    
                     ListObjectsV2Response empresas = s3.listarPastas(CLIENT_BUCKET);
-
 
                     for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
                         String empresa = empresaPrefix.prefix().replace("/", "");
-                        System.out.println("Processando empresa: " + empresa);
 
-                        ListObjectsV2Response servidores = s3.listarComPrefixo(CLIENT_BUCKET, empresa + "/", true);
+                        String jiraInfoPath = empresa + "/JiraInfo/";
 
+                        ListObjectsV2Response jiraFolderCheck = s3.listarComPrefixo(CLIENT_BUCKET, jiraInfoPath, false);
+                        boolean pastaExiste = !jiraFolderCheck.contents().isEmpty() ||
+                                jiraFolderCheck.commonPrefixes().stream()
+                                        .anyMatch(cp -> cp.prefix().equals(jiraInfoPath));
 
-                        for (CommonPrefix servidorPrefix : servidores.commonPrefixes()) {
-                            String servidorCompleto = servidorPrefix.prefix();
-                            String servidor = servidorCompleto.replace(empresa + "/", "").replace("/", "");
-                            System.out.println("Processando pasta: " + empresa + "/" + servidor);
-
-                            // VALIDAR SE PASTA EXISTE!!!
-                            if (servidor.equals("JiraInfo")) {
-
-                                String key = String.format("%s/JiraInfo/Jira-%s.json",
-                                        empresa,
-                                        //JiraInfo,
-                                        LocalDate.now());
-                                s3.enviarJsonObject(CLIENT_BUCKET, key, jsonClient);
-
-                                System.out.println("Salvo em: " + key);
-                            }
-
+                        if (!pastaExiste) {
+                            String dummyKey = jiraInfoPath + ".keep";
+                            s3.enviarJsonObject(CLIENT_BUCKET, dummyKey, "{}");
+                            System.out.println("Pasta JiraInfo criada para empresa: " + empresa);
                         }
-                    }
 
+                        String key = String.format("%s/JiraInfo/Jira-%s.json",
+                                empresa,
+                                LocalDate.now());
+                        s3.enviarJsonObject(CLIENT_BUCKET, key, jsonClient);
+                        System.out.println("Salvo em: " + key);
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -208,7 +195,7 @@ public class JiraInfo {
                         errorBody = errorResponse.toString();
                     }
                 }
-                
+
                 System.err.println("ERRO! responseCode: " + responseCode);
                 System.err.println("Mensagem: " + conn.getResponseMessage());
                 if (!errorBody.isEmpty()) {
@@ -251,4 +238,6 @@ public class JiraInfo {
         }
         return null;
     }
+
+
 }

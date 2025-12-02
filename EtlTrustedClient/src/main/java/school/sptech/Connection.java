@@ -10,7 +10,7 @@ public class Connection {
 
         dataSource.setDriverClassName("com.mysql.cj.jdbc.Driver");
 
-        dataSource.setUrl("jdbc:mysql://34.197.61.124:3306/nextrail?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8");
+        dataSource.setUrl("jdbc:mysql://3.229.26.249:3306/nextrail?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8");
 
         // USUÁRIO E SENHA DO MYSQL
         dataSource.setUsername(Credenciais.getMysqlUser());

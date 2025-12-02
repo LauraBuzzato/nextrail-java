@@ -7,8 +7,8 @@ import java.util.*;
 
 public class PrevisoesTrat {
 
-    private static final String TRUSTED_BUCKET = "trusted-nextrail-teste";
-    private static final String CLIENT_BUCKET = "client-nextrail-teste";
+    private static final String TRUSTED_BUCKET = "nextrail-trusted-log";
+    private static final String CLIENT_BUCKET = "nextrail-client-log";
 
     private static final S3Service s3 = new S3Service();
 
@@ -117,15 +117,10 @@ public class PrevisoesTrat {
             todosValoresLatencia.add(dado.getLatencia().get(0));
         }
 
-        List<Double> mediasCpu = calcularMediasSemanais(dadosHistoricos, "cpu", todosValoresCpu);
-        List<Double> mediasRam = calcularMediasSemanais(dadosHistoricos, "ram", todosValoresRam);
-        List<Double> mediasDisco = calcularMediasSemanais(dadosHistoricos, "disco", todosValoresDisco);
-        List<Double> mediasLatencia = calcularMediasSemanais(dadosHistoricos, "latencia", todosValoresLatencia);
-
-        List<Double> previsaoCpu = calcularPrevisaoComHistorico(mediasCpu);
-        List<Double> previsaoRam = calcularPrevisaoComHistorico(mediasRam);
-        List<Double> previsaoDisco = calcularPrevisaoComHistorico(mediasDisco);
-        List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
+        List<Double> previsaoCpu = calcularPrevisaoComHistorico(todosValoresCpu, "semanal");
+        List<Double> previsaoRam = calcularPrevisaoComHistorico(todosValoresRam, "semanal");
+        List<Double> previsaoDisco = calcularPrevisaoComHistorico(todosValoresDisco, "semanal");
+        List<Double> previsaoLatencia = calcularPrevisaoComHistorico(todosValoresLatencia, "semanal");
 
         return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia,
                 empresa, servidor, "semanal", todosValoresCpu, todosValoresRam, todosValoresDisco, todosValoresLatencia);
@@ -144,15 +139,10 @@ public class PrevisoesTrat {
             todosValoresLatencia.add(dado.getLatencia().get(0));
         }
 
-        List<Double> mediasCpu = calcularMediasMensais(dadosHistoricos, "cpu", todosValoresCpu);
-        List<Double> mediasRam = calcularMediasMensais(dadosHistoricos, "ram", todosValoresRam);
-        List<Double> mediasDisco = calcularMediasMensais(dadosHistoricos, "disco", todosValoresDisco);
-        List<Double> mediasLatencia = calcularMediasMensais(dadosHistoricos, "latencia", todosValoresLatencia);
-
-        List<Double> previsaoCpu = calcularPrevisaoComHistorico(mediasCpu);
-        List<Double> previsaoRam = calcularPrevisaoComHistorico(mediasRam);
-        List<Double> previsaoDisco = calcularPrevisaoComHistorico(mediasDisco);
-        List<Double> previsaoLatencia = calcularPrevisaoComHistorico(mediasLatencia);
+        List<Double> previsaoCpu = calcularPrevisaoComHistorico(todosValoresCpu, "mensal");
+        List<Double> previsaoRam = calcularPrevisaoComHistorico(todosValoresRam, "mensal");
+        List<Double> previsaoDisco = calcularPrevisaoComHistorico(todosValoresDisco, "mensal");
+        List<Double> previsaoLatencia = calcularPrevisaoComHistorico(todosValoresLatencia, "mensal");
 
         return new PrevisaoModel(previsaoCpu, previsaoRam, previsaoDisco, previsaoLatencia,
                 empresa, servidor, "mensal", todosValoresCpu, todosValoresRam, todosValoresDisco, todosValoresLatencia);
@@ -245,7 +235,7 @@ public class PrevisoesTrat {
         return medias;
     }
 
-    private static List<Double> calcularPrevisaoComHistorico(List<Double> historico) {
+    private static List<Double> calcularPrevisaoComHistorico(List<Double> historico, String periodo) {
         List<Double> resultado = new ArrayList<>();
 
         if (historico.isEmpty()) {
@@ -265,23 +255,13 @@ public class PrevisoesTrat {
         resultado.add(historico.get(ultimoIndex - 1));
         resultado.add(historico.get(ultimoIndex));
 
-        int n = historico.size();
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+        List<Double> previsoesArima = ARIMAImplementation.preverComSARIMA(historico, 2, periodo);
 
-        for (int i = 0; i < n; i++) {
-            sumX += i;
-            sumY += historico.get(i);
-            sumXY += i * historico.get(i);
-            sumX2 += i * i;
-        }
-
-        double slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-        double intercept = (sumY - slope * sumX) / n;
-
-        for (int i = n; i < n + 2; i++) {
-            double previsao = slope * i + intercept;
-            previsao = Math.max(0, Math.min(100, previsao));
-            resultado.add(Math.round(previsao * 10.0) / 10.0);
+        if (previsoesArima.size() >= 2) {
+            resultado.addAll(previsoesArima);
+        } else {
+            resultado.add(historico.get(ultimoIndex));
+            resultado.add(historico.get(ultimoIndex));
         }
 
         return resultado;

@@ -50,7 +50,7 @@ public class MontarKey {
         String empresa  = partes[0];
         String servidor = partes[1];
 
-        return String.format("dadosDashAlertas/%s/%s/mensal_%d-%02d.json",
+        return String.format("%s/%s/dadosDashAlertas/mensal_%d-%02d.json",
                 empresa, servidor,
                 data.getYear(), data.getMonthValue());
     }
@@ -61,7 +61,7 @@ public class MontarKey {
         String empresa  = partes[0];
         String servidor = partes[1];
 
-        return String.format("dadosDashAlertas/%s/%s/anual_%d.json",
+        return String.format("%s/%s/dadosDashAlertas/anual_%d.json",
                 empresa, servidor,
                 data.getYear());
     }

@@ -11,8 +11,8 @@ import java.util.Map;
 
 public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
-    private static final String TRUSTED_BUCKET = "trusted-nextrail-teste";
-    private static final String CLIENT_BUCKET = "client-nextrail-teste";
+    private static final String TRUSTED_BUCKET = "nextrail-trusted-log";
+    private static final String CLIENT_BUCKET = "nextrail-client-log";
 
     private static final S3Service s3 = new S3Service();
 

@@ -154,9 +154,9 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
             String bucketTrusted = System.getenv("BUCKET_TRUSTED");
             String bucketClient = System.getenv("BUCKET_CLIENT");
 
-            if (bucketRaw == null) bucketRaw = "raw-nextrail-teste";
-            if (bucketTrusted == null) bucketTrusted = "trusted-nextrail-teste";
-            if (bucketClient == null) bucketClient = "client-nextrail-teste";
+            if (bucketRaw == null) bucketRaw = "nextrail-raw-log";
+            if (bucketTrusted == null) bucketTrusted = "nextrail-trusted-log";
+            if (bucketClient == null) bucketClient = "nextrail-client-log";
 
             System.out.println("Buckets configurados:");
             System.out.println("Raw: " + bucketRaw);
