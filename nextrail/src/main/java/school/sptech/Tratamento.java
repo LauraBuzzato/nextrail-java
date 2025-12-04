@@ -833,7 +833,8 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
                 servidor.resetarContadoresCpu();
                 System.out.println("ALERTA CPU - Servidor: " + servidor.getNome() +
                         " | Gravidade: " + gravidadeCpu +
-                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
+                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta() +
+                        " | Timestamp: " + timestamp);
             }
         }
 
@@ -845,7 +846,8 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
                 servidor.resetarContadoresRam();
                 System.out.println("ALERTA RAM - Servidor: " + servidor.getNome() +
                         " | Gravidade: " + gravidadeRam +
-                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
+                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta() +
+                        " | Timestamp: " + timestamp);
             }
         }
 
@@ -857,7 +859,8 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
                 servidor.resetarContadoresDisco();
                 System.out.println("ALERTA DISCO - Servidor: " + servidor.getNome() +
                         " | Gravidade: " + gravidadeDisco +
-                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta());
+                        " | Leituras consecutivas: " + servidor.getLeiturasParaAlerta() +
+                        " | Timestamp: " + timestamp);
             }
         }
 

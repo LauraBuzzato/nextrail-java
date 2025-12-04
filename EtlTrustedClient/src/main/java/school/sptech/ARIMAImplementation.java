@@ -5,29 +5,51 @@ import java.util.List;
 
 public class ARIMAImplementation {
 
-    public static List<Double> preverComSARIMA(List<Double> historico, int previsoes, String periodo) {
-        List<Double> resultado = new ArrayList<>();
-
-        if (historico == null || historico.size() < 8) {
-            return calcularPrevisaoLinear(historico, previsoes);
+    public static double[] preverComSARIMAAdaptado(List<Double> mediasHistoricas, String periodo) {
+        if (mediasHistoricas == null || mediasHistoricas.size() < 3) {
+            return new double[]{0.0, 0.0, 0.0, 0.0};
         }
 
         try {
-            double[] dados = new double[historico.size()];
-            for (int i = 0; i < historico.size(); i++) {
-                dados[i] = historico.get(i);
+            double[] dados = new double[mediasHistoricas.size()];
+            for (int i = 0; i < mediasHistoricas.size(); i++) {
+                dados[i] = mediasHistoricas.get(i);
             }
 
-            int periodoSazonal = periodo.equals("semanal") ? 7 : 30;
+            int tamanho = dados.length;
+            double mediaAnterior = dados[tamanho - 2];
+            double mediaAtual = dados[tamanho - 1];
 
-            if (historico.size() >= periodoSazonal * 2) {
-                return preverSARIMA(dados, previsoes, periodoSazonal);
+            int periodoSazonal = periodo.equals("semanal") ? 4 : 12;
+
+            List<Double> previsoesList;
+            if (mediasHistoricas.size() >= periodoSazonal * 2) {
+                previsoesList = preverSARIMA(dados, 2, periodoSazonal);
             } else {
-                return preverARIMA(dados, previsoes);
+                previsoesList = preverARIMA(dados, 2);
             }
+
+            double previsaoProxima = previsoesList.size() > 0 ? previsoesList.get(0) : mediaAtual;
+            double previsaoSubsequente = previsoesList.size() > 1 ? previsoesList.get(1) : previsaoProxima;
+
+            return new double[]{
+                    Math.round(mediaAnterior * 10.0) / 10.0,
+                    Math.round(mediaAtual * 10.0) / 10.0,
+                    Math.round(previsaoProxima * 10.0) / 10.0,
+                    Math.round(previsaoSubsequente * 10.0) / 10.0
+            };
 
         } catch (Exception e) {
-            return calcularPrevisaoLinear(historico, previsoes);
+            int tamanho = mediasHistoricas.size();
+            double mediaAnterior = tamanho >= 2 ? mediasHistoricas.get(tamanho - 2) : 0.0;
+            double mediaAtual = tamanho >= 1 ? mediasHistoricas.get(tamanho - 1) : 0.0;
+
+            return new double[]{
+                    Math.round(mediaAnterior * 10.0) / 10.0,
+                    Math.round(mediaAtual * 10.0) / 10.0,
+                    Math.round(mediaAtual * 10.0) / 10.0,
+                    Math.round(mediaAtual * 10.0) / 10.0
+            };
         }
     }
 
@@ -35,14 +57,23 @@ public class ARIMAImplementation {
         List<Double> previsoesList = new ArrayList<>();
         int n = dados.length;
 
-        double ultimoValor = dados[n - 1];
-        double penultimoValor = dados[n - 2];
+        if (n < 2) {
+            for (int i = 0; i < previsoes; i++) {
+                previsoesList.add(n > 0 ? dados[n - 1] : 0.0);
+            }
+            return previsoesList;
+        }
 
-        double tendencia = ultimoValor - penultimoValor;
-        double mediaMovel = calcularMediaMovel(dados, 3);
+        double[] diferencas = new double[n - 1];
+        for (int i = 0; i < n - 1; i++) {
+            diferencas[i] = dados[i + 1] - dados[i];
+        }
+
+        double mediaDiferencas = calcularMedia(diferencas);
+        double ultimoValor = dados[n - 1];
 
         for (int i = 0; i < previsoes; i++) {
-            double previsao = ultimoValor + tendencia * (i + 1) * 0.8;
+            double previsao = ultimoValor + mediaDiferencas * (i + 1);
             previsao = Math.max(0, Math.min(100, previsao));
             previsoesList.add(Math.round(previsao * 10.0) / 10.0);
         }
@@ -121,10 +152,12 @@ public class ARIMAImplementation {
         int n = dados.length;
         if (n < 2) return 0;
 
-        double primeiro = dados[0];
-        double ultimo = dados[n - 1];
+        double[] diferencas = new double[n - 1];
+        for (int i = 0; i < n - 1; i++) {
+            diferencas[i] = dados[i + 1] - dados[i];
+        }
 
-        return (ultimo - primeiro) / (n - 1);
+        return calcularMedia(diferencas);
     }
 
     private static double calcularMediaMovel(double[] dados, int janela) {
@@ -139,40 +172,9 @@ public class ARIMAImplementation {
     }
 
     private static double calcularMedia(double[] valores) {
+        if (valores.length == 0) return 0;
         double soma = 0;
         for (double v : valores) soma += v;
         return soma / valores.length;
-    }
-
-    private static List<Double> calcularPrevisaoLinear(List<Double> historico, int previsoes) {
-        List<Double> resultado = new ArrayList<>();
-
-        if (historico == null || historico.isEmpty()) {
-            for (int i = 0; i < previsoes; i++) {
-                resultado.add(0.0);
-            }
-            return resultado;
-        }
-
-        int n = historico.size();
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-
-        for (int i = 0; i < n; i++) {
-            sumX += i;
-            sumY += historico.get(i);
-            sumXY += i * historico.get(i);
-            sumX2 += i * i;
-        }
-
-        double slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-        double intercept = (sumY - slope * sumX) / n;
-
-        for (int i = n; i < n + previsoes; i++) {
-            double previsao = slope * i + intercept;
-            previsao = Math.max(0, Math.min(100, previsao));
-            resultado.add(Math.round(previsao * 10.0) / 10.0);
-        }
-
-        return resultado;
     }
 }

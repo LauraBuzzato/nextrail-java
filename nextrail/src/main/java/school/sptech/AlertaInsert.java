@@ -12,17 +12,46 @@ public class AlertaInsert {
         this.con = con;
     }
 
-   
+    public boolean existeAlerta(Integer servidorId, Integer tipoComponenteId, Integer gravidade, String tempoInicio) {
+        try {
+            String sql = """
+                SELECT COUNT(*) FROM alerta 
+                WHERE fk_componenteServidor_servidor = ?
+                AND fk_componenteServidor_tipoComponente = ?
+                AND fk_gravidade = ?
+                AND inicio = ?
+                """;
+
+            Integer count = con.queryForObject(sql, Integer.class,
+                    servidorId, tipoComponenteId, gravidade, tempoInicio);
+
+            return count != null && count > 0;
+        } catch (Exception e) {
+            System.out.println("Erro ao verificar alerta existente: " + e.getMessage());
+            return false;
+        }
+    }
+
     public void inserirAlerta(Integer servidorId, Integer tipoComponenteId, Integer gravidade, String tempoInicio) {
+        if (existeAlerta(servidorId, tipoComponenteId, gravidade, tempoInicio)) {
+            System.out.println("Alerta já existe - NÃO inserido - Servidor: " + servidorId +
+                    ", Componente: " + tipoComponenteId +
+                    ", Gravidade: " + gravidade +
+                    ", Início: " + tempoInicio);
+            return;
+        }
+
         String sql = """
                 INSERT INTO alerta (fk_componenteServidor_servidor, fk_componenteServidor_tipoComponente, fk_gravidade, inicio)
                 VALUES (?, ?, ?, ?)
                 """;
-        con.update(sql, servidorId, tipoComponenteId, gravidade, tempoInicio );
-        System.out.println("Alerta inserido - Servidor: " + servidorId + ", Tipo Componente: " + tipoComponenteId + ", Gravidade: " + gravidade);
+        con.update(sql, servidorId, tipoComponenteId, gravidade, tempoInicio);
+        System.out.println("Alerta inserido - Servidor: " + servidorId +
+                ", Tipo Componente: " + tipoComponenteId +
+                ", Gravidade: " + gravidade +
+                ", Início: " + tempoInicio);
     }
 
-  
     public Integer buscarIdTipoComponente(String nomeTipoComponente) {
         try {
             String sql = "SELECT id FROM tipo_componente WHERE nome_tipo_componente = ?";

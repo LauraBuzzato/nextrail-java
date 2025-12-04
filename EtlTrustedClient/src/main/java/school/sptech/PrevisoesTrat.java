@@ -148,93 +148,6 @@ public class PrevisoesTrat {
                 empresa, servidor, "mensal", todosValoresCpu, todosValoresRam, todosValoresDisco, todosValoresLatencia);
     }
 
-    private static List<Double> calcularMediasSemanais(List<PrevisaoModel> dados, String componente, List<Double> todosValores) {
-        List<Double> medias = new ArrayList<>();
-
-        if (dados.isEmpty()) {
-            return medias;
-        }
-
-        if (todosValores.size() >= 7) {
-            int numSemanas = Math.min(4, (todosValores.size() + 6) / 7);
-
-            for (int semana = 0; semana < numSemanas; semana++) {
-                int inicio = semana * 7;
-                int fim = Math.min((semana + 1) * 7, todosValores.size());
-
-                double soma = 0;
-                int count = 0;
-
-                for (int i = inicio; i < fim; i++) {
-                    soma += todosValores.get(i);
-                    count++;
-                }
-
-                if (count > 0) {
-                    medias.add(soma / count);
-                }
-            }
-        } else {
-            medias.addAll(todosValores);
-        }
-
-        return medias;
-    }
-
-    private static List<Double> calcularMediasMensais(List<PrevisaoModel> dados, String componente, List<Double> todosValores) {
-        List<Double> medias = new ArrayList<>();
-
-        if (dados.isEmpty()) {
-            return medias;
-        }
-
-        if (todosValores.size() >= 14) {
-            if (todosValores.size() >= 30) {
-                int numMeses = Math.min(3, (todosValores.size() + 29) / 30);
-
-                for (int mes = 0; mes < numMeses; mes++) {
-                    int inicio = mes * 30;
-                    int fim = Math.min((mes + 1) * 30, todosValores.size());
-
-                    double soma = 0;
-                    int count = 0;
-
-                    for (int i = inicio; i < fim; i++) {
-                        soma += todosValores.get(i);
-                        count++;
-                    }
-
-                    if (count > 0) {
-                        medias.add(soma / count);
-                    }
-                }
-            } else {
-                int numQuinzenas = Math.min(4, (todosValores.size() + 14) / 15);
-
-                for (int quinzena = 0; quinzena < numQuinzenas; quinzena++) {
-                    int inicio = quinzena * 15;
-                    int fim = Math.min((quinzena + 1) * 15, todosValores.size());
-
-                    double soma = 0;
-                    int count = 0;
-
-                    for (int i = inicio; i < fim; i++) {
-                        soma += todosValores.get(i);
-                        count++;
-                    }
-
-                    if (count > 0) {
-                        medias.add(soma / count);
-                    }
-                }
-            }
-        } else {
-            medias.addAll(todosValores);
-        }
-
-        return medias;
-    }
-
     private static List<Double> calcularPrevisaoComHistorico(List<Double> historico, String periodo) {
         List<Double> resultado = new ArrayList<>();
 
@@ -255,10 +168,11 @@ public class PrevisoesTrat {
         resultado.add(historico.get(ultimoIndex - 1));
         resultado.add(historico.get(ultimoIndex));
 
-        List<Double> previsoesArima = ARIMAImplementation.preverComSARIMA(historico, 2, periodo);
+        double[] previsoesArray = ARIMAImplementation.preverComSARIMAAdaptado(historico, periodo);
 
-        if (previsoesArima.size() >= 2) {
-            resultado.addAll(previsoesArima);
+        if (previsoesArray.length >= 4) {
+            resultado.add(previsoesArray[2]);
+            resultado.add(previsoesArray[3]);
         } else {
             resultado.add(historico.get(ultimoIndex));
             resultado.add(historico.get(ultimoIndex));
