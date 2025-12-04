@@ -78,7 +78,7 @@ public class PrevisaoModel {
     }
 
     private double calcularCrescimentoSemanal(List<Double> valores) {
-        if (valores.size() >= 14) {
+        if (valores.size() >= 7) {
             int totalDias = valores.size();
             double mediaSemanaAtual = calcularMedia(valores, Math.max(0, totalDias - 7), totalDias - 1);
             double mediaSemanaAnterior = calcularMedia(valores, Math.max(0, totalDias - 14), Math.max(0, totalDias - 8));
@@ -87,24 +87,12 @@ public class PrevisaoModel {
                 double crescimento = ((mediaSemanaAtual - mediaSemanaAnterior) / mediaSemanaAnterior) * 100;
                 return Math.round(crescimento * 10.0) / 10.0;
             }
-        } else if (valores.size() >= 7) {
-            int pontoMeio = valores.size() / 2;
-            double primeiraMetade = calcularMedia(valores, 0, pontoMeio - 1);
-            double segundaMetade = calcularMedia(valores, pontoMeio, valores.size() - 1);
-
-            if (primeiraMetade > 0) {
-                double crescimento = ((segundaMetade - primeiraMetade) / primeiraMetade) * 100;
-                return Math.round(crescimento * 10.0) / 10.0;
-            }
-        } else if (valores.size() >= 2) {
-            return calcularCrescimentoSimples(valores);
         }
-
-        return 0.0;
+        return calcularCrescimentoSimples(valores);
     }
 
     private double calcularCrescimentoMensal(List<Double> valores) {
-        if (valores.size() >= 60) {
+        if (valores.size() >= 30) {
             int totalDias = valores.size();
             double mediaMesAtual = calcularMedia(valores, Math.max(0, totalDias - 30), totalDias - 1);
             double mediaMesAnterior = calcularMedia(valores, Math.max(0, totalDias - 60), Math.max(0, totalDias - 31));
@@ -113,20 +101,8 @@ public class PrevisaoModel {
                 double crescimento = ((mediaMesAtual - mediaMesAnterior) / mediaMesAnterior) * 100;
                 return Math.round(crescimento * 10.0) / 10.0;
             }
-        } else if (valores.size() >= 30) {
-            int pontoMeio = valores.size() / 2;
-            double primeiraMetade = calcularMedia(valores, 0, pontoMeio - 1);
-            double segundaMetade = calcularMedia(valores, pontoMeio, valores.size() - 1);
-
-            if (primeiraMetade > 0) {
-                double crescimento = ((segundaMetade - primeiraMetade) / primeiraMetade) * 100;
-                return Math.round(crescimento * 10.0) / 10.0;
-            }
-        } else if (valores.size() >= 2) {
-            return calcularCrescimentoSimples(valores);
         }
-
-        return 0.0;
+        return calcularCrescimentoSimples(valores);
     }
 
     private double calcularMedia(List<Double> valores, int inicio, int fim) {
