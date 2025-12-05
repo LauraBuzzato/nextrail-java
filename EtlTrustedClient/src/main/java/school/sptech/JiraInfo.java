@@ -149,9 +149,6 @@ public class JiraInfo {
                 }
 
                 try {
-                    ObjectMapper objectMapper = new ObjectMapper();
-                    String jsonClient = objectMapper.writeValueAsString(listaSuporte);
-
                     ListObjectsV2Response empresas = s3.listarPastas(CLIENT_BUCKET);
 
                     for (CommonPrefix empresaPrefix : empresas.commonPrefixes()) {
@@ -173,7 +170,7 @@ public class JiraInfo {
                         String key = String.format("%s/JiraInfo/Jira-%s.json",
                                 empresa,
                                 LocalDate.now());
-                        s3.enviarJsonObject(CLIENT_BUCKET, key, jsonClient);
+                        s3.enviarJsonObject(CLIENT_BUCKET, key, listaSuporte);
                         System.out.println("Salvo em: " + key);
                     }
                 } catch (Exception e) {
