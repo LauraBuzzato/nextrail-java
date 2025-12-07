@@ -5,7 +5,10 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import software.amazon.awssdk.services.s3.model.*;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -13,14 +16,25 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
     private static final String TRUSTED_BUCKET = "nextrail-trusted-log";
     private static final String CLIENT_BUCKET = "nextrail-client-log";
+    private static final String LOCK_FILE = "/tmp/etl2.lock";
+    private static final int LOCK_TIMEOUT_MINUTES = 3;
 
     private static final S3Service s3 = new S3Service();
 
     public String handleRequest(Map<String, Object> input, Context context) {
         LambdaLogger logger = context.getLogger();
-        logger.log("Start");
+        logger.log("=== INÍCIO DA EXECUÇÃO ETL2 ===");
+        logger.log("Horário: " + LocalDateTime.now());
+
+        String lockStatus = verificarECriarLock(logger);
+        if (!lockStatus.equals("LOCK_OK")) {
+            logger.log("Execução ignorada: " + lockStatus);
+            return lockStatus;
+        }
 
         try {
+            logger.log("Start");
+
             if (isJiraEvent(input)) {
                 logger.log("Executando apenas JiraInfo.jiraMain()");
                 JiraInfo.jiraMain();
@@ -32,8 +46,73 @@ public class Tratamento implements RequestHandler<Map<String, Object>, String> {
                 return resultado;
             }
         } catch (Exception e) {
-            logger.log("Erro na realização da ETL2" + e.getMessage());
-            return "ERRO";
+            logger.log("Erro na realização da ETL2: " + e.getMessage());
+            return "ERRO: " + e.getMessage();
+        } finally {
+            removerLock(logger);
+        }
+    }
+
+    private String verificarECriarLock(LambdaLogger logger) {
+        try {
+            File lockFile = new File(LOCK_FILE);
+
+            if (lockFile.exists()) {
+                long lastModified = lockFile.lastModified();
+                long now = System.currentTimeMillis();
+                long minutesSince = (now - lastModified) / (1000 * 60);
+
+                logger.log("Lock encontrado. Criado há " + minutesSince + " minutos.");
+
+                if (minutesSince < LOCK_TIMEOUT_MINUTES) {
+                    logger.log("Lock ainda ativo (há " + minutesSince + " minutos). Ignorando execução.");
+                    return "SKIPPED: Já está em execução (lock ativo há " + minutesSince + " minutos)";
+                } else {
+                    // Lock muito antigo (possivelmente de execução que travou), remover
+                    logger.log("Lock antigo (" + minutesSince + " minutos). Removendo...");
+                    if (!lockFile.delete()) {
+                        logger.log("Aviso: Não foi possível remover lock antigo.");
+                    }
+                }
+            }
+
+            if (!lockFile.createNewFile()) {
+                logger.log("ERRO: Não foi possível criar lock. Outro processo pode estar rodando.");
+                return "ERROR_LOCK: Não foi possível adquirir lock";
+            }
+
+            try {
+                java.nio.file.Files.write(
+                        lockFile.toPath(),
+                        ("Lock criado em: " + LocalDateTime.now() +
+                                "\nProcesso: ETL2 Lambda" +
+                                "\nTimeout: " + LOCK_TIMEOUT_MINUTES + " minutos").getBytes()
+                );
+            } catch (Exception e) {
+                // Ignora erro na escrita, o importante é o arquivo existir
+            }
+
+            logger.log("Lock adquirido com sucesso");
+            return "LOCK_OK";
+
+        } catch (IOException e) {
+            logger.log("ERRO ao manipular lock: " + e.getMessage());
+            return "ERROR_LOCK_IO: " + e.getMessage();
+        }
+    }
+
+    private void removerLock(LambdaLogger logger) {
+        try {
+            File lockFile = new File(LOCK_FILE);
+            if (lockFile.exists()) {
+                if (lockFile.delete()) {
+                    logger.log("Lock removido com sucesso");
+                } else {
+                    logger.log("Aviso: Não foi possível remover lock");
+                }
+            }
+        } catch (Exception e) {
+            logger.log("Aviso: Erro ao remover lock: " + e.getMessage());
         }
     }
 

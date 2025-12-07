@@ -11,6 +11,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -23,22 +25,102 @@ import java.util.*;
 
 public class Tratamento implements RequestHandler<Map<String, Object>, String> {
 
+    private static final String LOCK_FILE = "/tmp/etl.lock";
+    private static final int LOCK_TIMEOUT_MINUTES = 2; // Tempo máximo para considerar lock válido
+
     private static final List<ServidorConfig> servidoresConfig = new ArrayList<>();
     private static final List<ServidorArquivo> arquivosPorServidor = new ArrayList<>();
 
     @Override
     public String handleRequest(Map<String, Object> event, Context context) {
         LambdaLogger logger = context.getLogger();
-        logger.log("Iniciando processamento ETL via Lambda");
+        logger.log("=== NOVA INVOCAÇÃO DA LAMBDA ===");
+        logger.log("Horário: " + LocalDateTime.now());
+
+        // 1. VERIFICAR E CRIAR LOCK
+        String lockStatus = verificarECriarLock(logger);
+        if (!lockStatus.equals("LOCK_OK")) {
+            return lockStatus;
+        }
 
         try {
+            logger.log("Processamento iniciando...");
             String resultado = processarComIntervalo();
             logger.log("Processamento concluído");
             return resultado;
+
         } catch (Exception e) {
             logger.log("Erro fatal no processamento: " + e.getMessage());
             e.printStackTrace();
             return "ERROR: " + e.getMessage();
+
+        } finally {
+            removerLock(logger);
+
+            servidoresConfig.clear();
+            arquivosPorServidor.clear();
+        }
+    }
+
+    private String verificarECriarLock(LambdaLogger logger) {
+        try {
+            File lockFile = new File(LOCK_FILE);
+
+            if (lockFile.exists()) {
+                long lastModified = lockFile.lastModified();
+                long now = System.currentTimeMillis();
+                long minutesSince = (now - lastModified) / (1000 * 60);
+
+                logger.log("Lock encontrado. Criado há " + minutesSince + " minutos.");
+
+                if (minutesSince < LOCK_TIMEOUT_MINUTES) {
+                    logger.log("Lock ainda ativo (há " + minutesSince + " minutos). Ignorando execução.");
+                    return "SKIPPED: Já está em execução (lock ativo há " + minutesSince + " minutos)";
+                } else {
+                    logger.log("Lock antigo (" + minutesSince + " minutos). Removendo...");
+                    if (!lockFile.delete()) {
+                        logger.log("Aviso: Não foi possível remover lock antigo.");
+                    }
+                }
+            }
+
+            if (!lockFile.createNewFile()) {
+                logger.log("ERRO: Não foi possível criar lock. Outro processo pode estar rodando.");
+                return "ERROR_LOCK: Não foi possível adquirir lock";
+            }
+
+            try {
+                java.nio.file.Files.write(
+                        lockFile.toPath(),
+                        ("Lock criado em: " + LocalDateTime.now() +
+                                "\nProcesso: ETL Lambda" +
+                                "\nTimeout: " + LOCK_TIMEOUT_MINUTES + " minutos").getBytes()
+                );
+            } catch (Exception e) {
+                // Ignora erro na escrita, o importante é o arquivo existir
+            }
+
+            logger.log("Lock adquirido com sucesso");
+            return "LOCK_OK";
+
+        } catch (IOException e) {
+            logger.log("ERRO ao manipular lock: " + e.getMessage());
+            return "ERROR_LOCK_IO: " + e.getMessage();
+        }
+    }
+
+    private void removerLock(LambdaLogger logger) {
+        try {
+            File lockFile = new File(LOCK_FILE);
+            if (lockFile.exists()) {
+                if (lockFile.delete()) {
+                    logger.log("Lock removido com sucesso");
+                } else {
+                    logger.log("Aviso: Não foi possível remover lock");
+                }
+            }
+        } catch (Exception e) {
+            logger.log("Aviso: Erro ao remover lock: " + e.getMessage());
         }
     }
 
