@@ -169,7 +169,7 @@ public class JiraInfo {
 
                         String key = String.format("%s/JiraInfo/Jira-%s.json",
                                 empresa,
-                                LocalDate.now());
+                                LocalDate.now().minusDays(1));
                         s3.enviarJsonObject(CLIENT_BUCKET, key, listaSuporte);
                         System.out.println("Salvo em: " + key);
                     }
