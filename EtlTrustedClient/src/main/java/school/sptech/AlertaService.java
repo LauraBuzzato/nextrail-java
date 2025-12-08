@@ -9,7 +9,6 @@ import java.util.Map;
 
 public class AlertaService {
     private final JdbcTemplate con;
-
     public AlertaService(JdbcTemplate con) {
         this.con = con;
     }
@@ -18,7 +17,7 @@ public class AlertaService {
     public Map<String, Integer> buscarConsolidadoAlertas(Integer idServidor, int ano, Integer mes) {
         Map<String, Integer> contador = new HashMap<>();
         contador.put("Baixo", 0);
-        contador.put("Médio", 0);
+        contador.put("Medio", 0);
         contador.put("Alto", 0);
 
         try {
@@ -49,7 +48,13 @@ public class AlertaService {
             for (Map<String, Object> row : resultados) {
                 String gravidade = (String) row.get("gravidade");
                 int total = ((Number) row.get("total")).intValue();
-                contador.put(gravidade, total);
+
+                String gravidadeNormalizada = gravidade;
+                if (gravidade.contains("é") || gravidade.contains("É")) {
+                    gravidadeNormalizada = gravidade.replace("é", "e").replace("É", "E");
+                }
+
+                contador.put(gravidadeNormalizada   , total);
             }
 
         } catch (Exception e) {

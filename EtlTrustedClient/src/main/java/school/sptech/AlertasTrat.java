@@ -143,7 +143,7 @@ public class AlertasTrat {
         double pctFormatada = Math.round(pctCrescimento * 10.0) / 10.0;
         json.put("alertas_pct_crescimento", pctFormatada);
         json.put("total_alertas_baixo", gravidade.get("Baixo"));
-        json.put("total_alertas_medio", gravidade.get("Médio"));
+        json.put("total_alertas_medio", gravidade.get("Medio"));
         json.put("total_alertas_alto", gravidade.get("Alto"));
         json.put("total_alertas_cpu", componentes.get("Cpu"));
         json.put("total_alertas_ram", componentes.get("Ram"));
